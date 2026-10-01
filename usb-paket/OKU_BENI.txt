@@ -1,0 +1,37 @@
+===================================================
+   SINOP BELEDIYESI - TEKNIK DESTEK TERMINALI
+===================================================
+
+NASIL KULLANILIR?
+------------------
+1) ONARIM_BASLAT.exe dosyasina CIFT TIKLA.
+2) Acilan siyah pencerede, istersen Sinop Belediyesi
+   logosunu ayri pencerede acabilirsin.
+3) Demirbas/PC adini yazabilir ya da bos gecebilirsin.
+4) Karsilastigin sorunu kisaca yaz, ornek:
+      "bilgisayar cok yavas aciliyor"
+   ya da "sik" yazip hazir sorun listesinden sec.
+5) Internet varsa yapay zeka (DeepSeek) destegiyle
+   akilli teshis ve onarim onerisi alirsin.
+   Internet yoksa yerel teshis listesi calisir.
+6) Sistemi degistiren her onarim adiminda sana ayrica
+   onay sorulur - onaylamadan hicbir sey calismaz.
+7) "hizli" yazarak hazir onarim komutlarindan birini
+   dogrudan secip onaylayarak calistirabilirsin.
+8) "cikis" ile programi kapat. Oturum ozeti otomatik
+   olarak bu USB'ye (raporlar/ klasorune) kaydedilir.
+
+GUVENLIK NOTU
+-------------
+Bu USB bellek hicbir yazilim kurmaz, hicbir komutu
+izinsiz calistirmaz. Butun onarim adimlari senin
+onayinla calisir.
+
+KLASOR YAPISI
+-------------
+ONARIM_BASLAT.exe   -> Ana program (buna cift tikla)
+assets/              -> Logo gorseli (varsa)
+loglar/               -> Otomatik olusan islem kayitlari
+raporlar/             -> Otomatik olusan oturum ozetleri
+demirbas_kayit_defteri.csv -> Hangi PC'de ne zaman
+                              calisildiginin kaydi

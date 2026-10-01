@@ -1,0 +1,25 @@
+# Derlenmiş çıktılar (API anahtarı gömülü olabilir)
+**/dist/
+**/build/
+*.exe
+*.spec.bak
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Oturum/log/rapor verileri (saha verisi, repoya girmemeli)
+usb-paket/loglar/
+usb-paket/raporlar/
+*.log
+demirbas_kayit_defteri.csv
+
+# Arduino derleme çıktıları
+*.hex
+*.bin
+
+# Editör/OS
+.vscode/
+Thumbs.db
+.DS_Store
