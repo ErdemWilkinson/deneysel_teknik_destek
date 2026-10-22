@@ -1,12 +1,12 @@
 ===================================================
-   SINOP BELEDIYESI - TEKNIK DESTEK TERMINALI
+          ERDEMUSB - TEKNIK DESTEK TERMINALI
 ===================================================
 
 NASIL KULLANILIR?
 ------------------
 1) ONARIM_BASLAT.exe dosyasina CIFT TIKLA.
-2) Acilan siyah pencerede, istersen Sinop Belediyesi
-   logosunu ayri pencerede acabilirsin.
+2) Acilan renkli pencerede, istersen bir kurum/logo
+   gorselini ayri pencerede acabilirsin (varsa).
 3) Demirbas/PC adini yazabilir ya da bos gecebilirsin.
 4) Karsilastigin sorunu kisaca yaz, ornek:
       "bilgisayar cok yavas aciliyor"
@@ -19,8 +19,9 @@ NASIL KULLANILIR?
 7) Bilgisayar yavassa "hizlandir" yaz: once neden yavas
    oldugunu ozetler, sonra her hizlandirma adimini tek tek
    onayinla uygular (internet gerekmez).
-8) "hizli" yazarak hazir onarim komutlarindan birini
-   dogrudan secip onaylayarak calistirabilirsin.
+8) "hizli" yazarak TUM araclari (teshis + hizlandirma +
+   guvenlik + ag + disk + sistem onarimi, kategorilere
+   ayrilmis) tek listede gorup secebilirsin.
 9) "cikis" ile programi kapat. Oturum ozeti otomatik
    olarak bu USB'ye (raporlar/ klasorune) kaydedilir.
 
@@ -28,7 +29,10 @@ GUVENLIK NOTU
 -------------
 Bu USB bellek hicbir yazilim kurmaz, hicbir komutu
 izinsiz calistirmaz. Butun onarim adimlari senin
-onayinla calisir.
+onayinla calisir. Program ilk acildiginda yonetici
+yetkisi ister (cogu arac bunu gerektirir); onay
+vermezsen de salt okunur teshis araclari calismaya
+devam eder.
 
 KLASOR YAPISI
 -------------
@@ -38,3 +42,9 @@ loglar/               -> Otomatik olusan islem kayitlari
 raporlar/             -> Otomatik olusan oturum ozetleri
 demirbas_kayit_defteri.csv -> Hangi PC'de ne zaman
                               calisildiginin kaydi
+
+BU USB'Yİ BASKA BİR PC'DE ILK KEZ KULLANMAK
+--------------------------------------------
+Bu ONARIM_BASLAT.exe kurulum istemez; herhangi bir
+Windows 10/11 bilgisayarinda cift tiklayinca acilir.
+Detaylar icin: docs/HER_PC_ICIN.md
