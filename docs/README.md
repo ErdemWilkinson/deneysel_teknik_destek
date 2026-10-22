@@ -34,22 +34,50 @@ araçların **beyaz listesidir**. Model asla keyfi bir komut üretip
 çalıştıramaz — sadece bu listedeki isimlerden birini "çağırmak istiyorum"
 der, programın kendisi o aracı yorumlayıp çalıştırır:
 
-- **Salt okunur araçlar** (`disk_durumu`, `event_log_oku`, `servis_durumu`,
-  `baslangic_programlari`, `ag_durumu`) — sistemi değiştirmez, onay
-  istenmeden otomatik çalışır.
-- **Salt okunur araçlar** ayrıca `kaynak_kullanimi` (anlık CPU/RAM ve en
-  çok kaynak tüketen süreçler) içerir.
-- **Onarım araçları** (`sfc_tarama`, `dism_onarim`, `dns_temizle`,
-  `ip_yenile`, `disk_temizligi`, `yazici_kuyrugu_temizle`, `disk_kontrolu`,
-  `windows_update_sifirla`, `geri_yukleme_noktasi`, `defender_tarama`) —
+- **Salt okunur araçlar** (`hiz_raporu`, `disk_durumu`, `disk_sagligi`,
+  `event_log_oku`, `servis_durumu`, `baslangic_programlari`,
+  `kaynak_kullanimi`, `surucu_sorunlari`, `ag_durumu`) — sistemi
+  değiştirmez, onay istenmeden otomatik çalışır.
+- **Onarım ve hızlandırma araçları** (`geri_yukleme_noktasi`,
+  `disk_temizligi`, `baslangic_programi_kapat`, `guc_plani_yuksek`,
+  `gorsel_efekt_performans`, `uygulamalari_guncelle`, `windows_update_tara`,
+  `defender_tarama`, `sfc_tarama`, `dism_onarim`, `disk_kontrolu`,
+  `dns_temizle`, `ip_yenile`, `ag_sifirla`, `yazici_kuyrugu_temizle`,
+  `windows_update_sifirla`) —
   sistemi değiştirir, model bunlardan birini çağırmak istediğinde ekranda
   **"Çalıştırılsın mı? [E/h]"** diye sorulur, onaylanmadan çalışmaz. AI,
   riskli bir onarıma başlamadan önce `geri_yukleme_noktasi` aracını
   önce çağırmaya teşvik edilir (sistem talimatında tanımlı).
 
+### Hızlandırma sihirbazı (`hizlandir`)
+
+Eski/yavaşlamış bir PC için tek komut: önce `hiz_raporu` ile yavaşlığın
+nedenini özetler (Windows sürümü, RAM, disk türü HDD/SSD, boş alan, açılış
+programı sayısı, güç planı, görsel efektler, geçici dosya boyutu), açılış
+programlarından kapatılacakları sorar, sonra her adımı **tek tek onay
+isteyerek** uygular: geri yükleme noktası → disk temizliği → görsel
+efektler → güç planı (dizüstünde atlanır) → programları güncelleme (winget)
+→ Windows Update → Defender taraması. Sonunda donanım önerisi verir (HDD
+ise SSD, 8 GB altı RAM ise RAM yükseltmesi). İnternet ve yapay zekâ
+gerekmez.
+
+### Yönetici yetkisi
+
+Onarım ve hızlandırma araçlarının çoğu yönetici ister. Program yönetici
+olarak açılmadıysa başta sorar ve UAC onayıyla kendini yönetici olarak
+yeniden açar. Yönetici olmadan da salt okunur teşhis araçları çalışır.
+
+### Güvenlik: AI parametreleri
+
+AI'nin araçlara gönderdiği parametreler (servis adı, sürücü harfi, program
+adı, açıklama) komutların içine yazıldığı için yalnızca harf, rakam,
+boşluk ve `_ . -` karakterlerine izin verilir; aksi halde parametre
+yok sayılır. Böylece bir parametrenin içine gizlenmiş komut onaysız
+çalıştırılamaz.
+
 ### Diğer özellikler
 
-- **Sık sorun kısayolları**: `sik` komutu, en yaygın 9 şikayeti numaralı
+- **Sık sorun kısayolları**: `liste` komutu, en yaygın 9 şikayeti numaralı
   listeden seçmeyi sağlar — teknisyen her seferinde yazmak zorunda kalmaz.
 - **Demirbaş/PC kayıt defteri**: her oturum sonunda, girilen demirbaş/PC
   adıyla birlikte `demirbas_kayit_defteri.csv` dosyasına bir satır eklenir
@@ -104,6 +132,25 @@ pc-terminal/                 Asıl onarım terminali (ONARIM_BASLAT.exe)
 pc-bridge/                   (Önceki) seri-port köprü prototipi — artık kullanılmıyor
 ```
 
+## Her PC'de çalışması (dinleyici kurulu olmayan PC'ler)
+
+Dinleyici yalnızca önceden kurulduğu PC'lerde çalışır. `ONARIM_BASLAT.exe`
+ise kurulum istemez; herhangi bir Windows 10/11 PC'de çift tıklayınca
+çalışır. Hiç görülmemiş bir PC'de kullanmak için iki yol var:
+
+1. **Pico'nun USB OTG pinlerini lehimlemek** (önerilen): ESP32-P4'ün native
+   USB'si karttaki 4 pinlik header'a çıkar. Bu pinlere bir USB kablo
+   lehimlenirse `firmware/firmware_msc` ile Pico normal bir USB bellek gibi
+   görünür ve içindeki `ONARIM_BASLAT.exe` her PC'de çift tıklanarak
+   açılır.
+2. **Lehimsiz yol**: `ONARIM_BASLAT.exe`'yi ve `usb-paket` içeriğini
+   sıradan bir USB belleğe kopyalayıp teknisyen çantasında Pico'nun
+   yanında taşımak.
+
+Dinleyici yalnızca Pico'nun USB-seri çipini (WCH CH343, VID 0x1A86) ve
+ESP32'nin kendi USB'sini (Espressif, VID 0x303A) dinler; PC'deki diğer seri
+cihazlara dokunmaz.
+
 ## Kurulum — Üç Aşama
 
 ### Aşama 1: ESP32-P4'e tetikleyici firmware'i yükle (bir kerelik, senin yapacağın)
@@ -156,7 +203,8 @@ PC'sinde:
 4. `ONARIM_BASLAT.exe` açılır. İstenirse demirbaş/PC adını yaz (boş da
    bırakılabilir).
 5. Sorunu kısaca yaz (örn: `bilgisayar cok yavas acilirken takiliyor`) ya
-   da `sik` yazıp hazır 9 şikayetten birini numarayla seç.
+   da `liste` yazıp hazır 9 şikayetten birini numarayla seç. Yavaş bir PC
+   için doğrudan `hizlandir` yaz.
 6. İnternet varsa DeepSeek ajanının kendi seçtiği teşhis adımlarını ve
    önerisini, yoksa yerel teşhis listesini oku. Sistemi değiştiren her
    adımda ayrıca onay istenir.
