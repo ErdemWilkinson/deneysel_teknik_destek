@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_adi">ERDEMUSB Hızlandırıcı</string>
+    <string name="raporu_yenile">Raporu Yenile</string>
+    <string name="depolama_ayarlari">Depolama Ayarları</string>
+    <string name="pil_ayarlari">Pil Ayarları</string>
+    <string name="uygulamalar_ayarlari">Tüm Uygulamalar</string>
+    <string name="onbellek_temizle">Bu Uygulamanın Önbelleğini Temizle</string>
+    <string name="buyuk_uygulamalar_basligi">En çok yer kaplayan uygulamalar (dokununca ayarları açılır, elle silebilir/önbelleğini temizleyebilirsin)</string>
+    <string name="ai_yok_notu">Bu uygulama internete bağlanmaz, yapay zeka kullanmaz — tüm teşhis ve öneriler cihaz üzerinde, yerel olarak hesaplanır.</string>
+</resources>

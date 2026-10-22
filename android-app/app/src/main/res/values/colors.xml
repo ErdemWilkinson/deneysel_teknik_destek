@@ -1,0 +1,7 @@
+<resources>
+    <color name="arka_plan">#121212</color>
+    <color name="yuzey">#1E1E1E</color>
+    <color name="vurgu">#FF8A3D</color>
+    <color name="metin">#F2F2F2</color>
+    <color name="metin_sonuk">#A8A8A8</color>
+</resources>
