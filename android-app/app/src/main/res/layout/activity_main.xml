@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/arka_plan"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/baslikMetni"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/app_adi"
+        android:textColor="@color/vurgu"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="8dp"
+        android:text="@string/ai_yok_notu"
+        android:textColor="@color/metin_sonuk"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/raporMetni"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/yuzey"
+        android:fontFamily="monospace"
+        android:padding="12dp"
+        android:textColor="@color/metin"
+        android:textSize="13sp" />
+
+    <Button
+        android:id="@+id/yenileButonu"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/raporu_yenile" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/depolamaButonu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="@string/depolama_ayarlari" />
+
+        <Button
+            android:id="@+id/pilButonu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:text="@string/pil_ayarlari" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/uygulamalarButonu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="@string/uygulamalar_ayarlari" />
+
+        <Button
+            android:id="@+id/onbellekButonu"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:text="@string/onbellek_temizle" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/buyuk_uygulamalar_basligi"
+        android:textColor="@color/metin_sonuk"
+        android:textSize="12sp" />
+
+    <ListView
+        android:id="@+id/uygulamaListesi"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="4dp"
+        android:divider="@color/yuzey"
+        android:dividerHeight="1dp" />
+
+</LinearLayout>

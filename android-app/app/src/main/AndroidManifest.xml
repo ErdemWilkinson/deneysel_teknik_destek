@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ONEMLI: Bu uygulama bilerek INTERNET izni ISTEMEZ. Boylece hicbir
+    yapay zeka/bulut servisine baglanamaz, kodda yanlislikla bir aglama
+    cagrisi olsa bile sistem onu engeller. Tum teshis/temizlik islemleri
+    tamamen cihaz uzerinde (offline) calisir.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:label="@string/app_adi"
+        android:theme="@style/Theme.ErdemUsb"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

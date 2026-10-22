@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.ErdemUsb" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/vurgu</item>
+        <item name="colorPrimaryDark">@color/arka_plan</item>
+        <item name="colorAccent">@color/vurgu</item>
+        <item name="android:windowBackground">@color/arka_plan</item>
+        <item name="android:textColorPrimary">@color/metin</item>
+    </style>
+</resources>

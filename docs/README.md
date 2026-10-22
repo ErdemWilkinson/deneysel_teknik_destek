@@ -165,7 +165,19 @@ firmware/firmware_msc/      (Kullanılmıyor) MSC denemesi - bu kartta donanıms
 pc-listener/                 PC'ye önceden kurulacak dinleyici (DINLEYICI.exe)
 pc-terminal/                 Asıl onarım terminali (ONARIM_BASLAT.exe)
 pc-bridge/                   (Önceki) seri-port köprü prototipi — artık kullanılmıyor
+android-app/                 Telefon (Android) için ayrı, bağımsız hızlandırıcı uygulaması
 ```
+
+## Android sürümü (telefon hızlandırıcı)
+
+`android-app/` klasöründe, PC tarafındaki `hizlandir` sihirbazının
+Android karşılığı olan, **ayrı bir uygulama** var: depolama/RAM/pil
+durumunu özetler, en çok yer kaplayan uygulamaları listeler, ilgili
+sistem ayarlarına (Depolama, Pil, Uygulamalar) tek dokunuşla götürür.
+Bu sürüm de **internet/yapay zekâ kullanmaz** — `AndroidManifest.xml`'de
+`INTERNET` izni bilerek yok, tüm teşhis cihaz üzerinde hesaplanır.
+Pico/USB ile ilgisi yoktur, bağımsız bir Android Studio projesidir.
+Derleme adımları: [android-app/README.md](../android-app/README.md).
 
 ## Her PC'de çalışması (dinleyici kurulu olmayan PC'ler)
 
