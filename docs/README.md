@@ -1,4 +1,4 @@
-# Belediye Teknik Destek Terminali — ESP32-P4-Pico
+# ERDEMUSB — Taşınabilir Teknik Destek Terminali (ESP32-P4-Pico)
 
 Sahada kullanılan USB teşhis/onarım terminali. Teknisyen Pico'yu PC'ye
 takar → Pico "hazırım" sinyali gönderir → PC'de önceden kurulu dinleyici
@@ -6,6 +6,12 @@ bunu görüp bildirim gösterir → teknisyen **tek onayla** (Enter/tık)
 terminali açar → internet varsa DeepSeek **ajan modu** (tool calling)
 kendi kararıyla teşhis araçlarını çağırıp akıllı bir onarım önerir,
 yoksa yerel kural tabanlı teşhis devreye girer.
+
+Terminal (`ONARIM_BASLAT.exe`) renkli, kategorilere ayrılmış bir menüyle
+çalışır: **teşhis** (cyan), **hızlandırma** (yeşil), **güvenlik** (sarı),
+**ağ** (mavi), **disk** (mor), **sistem onarımı** (kırmızı). Hiçbir komut
+onaysız çalışmaz; salt okunur teşhis araçları dışındaki her şey açıkça
+`[E/h]` ile sorulur.
 
 ## Önemli: Donanım kısıtlaması ve mimari kararı
 
@@ -138,14 +144,15 @@ Dinleyici yalnızca önceden kurulduğu PC'lerde çalışır. `ONARIM_BASLAT.exe
 ise kurulum istemez; herhangi bir Windows 10/11 PC'de çift tıklayınca
 çalışır. Hiç görülmemiş bir PC'de kullanmak için iki yol var:
 
-1. **Pico'nun USB OTG pinlerini lehimlemek** (önerilen): ESP32-P4'ün native
-   USB'si karttaki 4 pinlik header'a çıkar. Bu pinlere bir USB kablo
-   lehimlenirse `firmware/firmware_msc` ile Pico normal bir USB bellek gibi
-   görünür ve içindeki `ONARIM_BASLAT.exe` her PC'de çift tıklanarak
-   açılır.
-2. **Lehimsiz yol**: `ONARIM_BASLAT.exe`'yi ve `usb-paket` içeriğini
-   sıradan bir USB belleğe kopyalayıp teknisyen çantasında Pico'nun
-   yanında taşımak.
+1. **Pico'nun USB OTG pinlerini lehimlemek** (önerilen, kalıcı çözüm):
+   ESP32-P4'ün native USB'si karttaki 4 pinlik header'a çıkar. Bu pinlere
+   bir USB kablo lehimlenirse `firmware/firmware_msc` ile Pico normal bir
+   USB bellek gibi görünür ve içindeki `ONARIM_BASLAT.exe` her PC'de çift
+   tıklanarak açılır — dinleyiciye bile gerek kalmaz. Adım adım lehim
+   rehberi, güvenlik uyarıları ve parça listesi: **[docs/HER_PC_ICIN.md](HER_PC_ICIN.md)**.
+2. **Lehimsiz yol** (hemen, alet gerektirmez): `ONARIM_BASLAT.exe`'yi ve
+   `usb-paket` içeriğini sıradan bir USB belleğe kopyalayıp teknisyen
+   çantasında Pico'nun yanında taşımak.
 
 Dinleyici yalnızca Pico'nun USB-seri çipini (WCH CH343, VID 0x1A86) ve
 ESP32'nin kendi USB'sini (Espressif, VID 0x303A) dinler; PC'deki diğer seri

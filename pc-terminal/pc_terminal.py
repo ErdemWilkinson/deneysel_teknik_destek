@@ -48,6 +48,8 @@ from datetime import datetime
 # Ayarlar
 # ------------------------------------------------------------------
 
+MARKA = "ERDEMUSB"  # terminalin ve konsol penceresinin basligindaki ad
+
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "BURAYA_DEEPSEEK_API_ANAHTARINI_YAZ")
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 DEEPSEEK_MODEL = "deepseek-chat"
@@ -68,12 +70,71 @@ LOG_FILE = os.path.join(LOG_DIR, f"oturum_{datetime.now():%Y%m%d_%H%M%S}.log")
 
 def log(msg: str):
     line = f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {msg}"
-    print(line)
+    # dosyaya duz, konsola sonuk (dim) gri yazilir - ic izleme kaydi gibi
+    # okunur, asil onemli mesajlar (hata/basari/onay) kendi renkleriyle one cikar
+    print(r(line, Renk.SONUK, Renk.GRI))
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line + "\n")
     except OSError:
         pass
+
+
+# ------------------------------------------------------------------
+# Renkler (ANSI) - terminali okumasi kolay hale getirir: yesil = salt
+# okunur/basarili, sari = onay gerektiren/dikkat, kirmizi = riskli/hata,
+# cyan/turuncu = basliklar. Hicbir karakter kaybi olmaz; renk kodlari
+# desteklenmeyen bir konsolda RENK_ACIK False kalir, metinler duz basilir.
+# ------------------------------------------------------------------
+
+class Renk:
+    SIFIRLA = "\033[0m"
+    KALIN = "\033[1m"
+    SONUK = "\033[2m"
+    KIRMIZI = "\033[38;5;203m"
+    YESIL = "\033[38;5;114m"
+    SARI = "\033[38;5;221m"
+    MAVI = "\033[38;5;75m"
+    MOR = "\033[38;5;177m"
+    CYAN = "\033[38;5;80m"
+    TURUNCU = "\033[38;5;215m"
+    GRI = "\033[38;5;245m"
+    BEYAZ = "\033[38;5;255m"
+
+
+RENK_ACIK = False
+
+
+def renklendir_etkinlestir():
+    """VT100/ANSI renk kodlarini bu konsolda acmayi dener. Windows 10 1511+
+    her yerde destekler ama varsayilan kapalidir; eski/alisilmadik bir
+    konsolda basarisiz olursa program renksiz calismaya devam eder."""
+    global RENK_ACIK
+    if os.name == "nt":
+        try:
+            kernel32 = ctypes.windll.kernel32
+            h = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+            mod = ctypes.c_uint32()
+            if kernel32.GetConsoleMode(h, ctypes.byref(mod)):
+                ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+                if kernel32.SetConsoleMode(h, mod.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING):
+                    RENK_ACIK = True
+            try:
+                kernel32.SetConsoleTitleW(f"{MARKA} - Teknik Destek Terminali")
+            except Exception:
+                pass
+        except Exception:
+            RENK_ACIK = False
+    else:
+        RENK_ACIK = sys.stdout.isatty()
+
+
+def r(metin: str, *renkler: str) -> str:
+    """Metni verilen ANSI renk kod(lar)iyla sarar; renk kapaliysa metni
+    oldugu gibi dondurur (hicbir yerde renk olmadan okunamaz hale gelmez)."""
+    if not RENK_ACIK or not renkler:
+        return metin
+    return "".join(renkler) + metin + Renk.SIFIRLA
 
 
 # ------------------------------------------------------------------
@@ -106,27 +167,37 @@ def yonetici_olarak_yeniden_ac() -> bool:
 # Gercek logo dosyasi (PNG) varsa burada aranir; varsa acilista (istege
 # baglica) varsayilan resim goruntuleyicide gosterilir. Dosya yoksa
 # sessizce atlanir, program yine calisir.
-LOGO_PNG = os.path.join(USB_DIZIN, "assets", "sinop_logo.png")
-
+LOGO_PNG_ADAYLAR = ("kurum_logo.png", "sinop_logo.png")  # ilk bulunan kullanilir
+LOGO_PNG = next(
+    (os.path.join(USB_DIZIN, "assets", ad) for ad in LOGO_PNG_ADAYLAR
+     if os.path.exists(os.path.join(USB_DIZIN, "assets", ad))),
+    os.path.join(USB_DIZIN, "assets", LOGO_PNG_ADAYLAR[0]),
+)
 # Terminalde (sadece metin karakterleriyle) gosterilen temsili amblem -
-# gunes isinlari cercevesini cagristiran sade bir ASCII cizim + buyuk
-# "SINOP BELEDIYESI" yazisi.
+
+# Terminalde (sadece ASCII metin karakterleriyle - eski Windows konsollarinin
+# kod sayfasinda da dogru gorunur) gosterilen bir USB bellek cizimi + MARKA'nin
+# buyuk harfli yazisi (pyfiglet "standard" fontu).
 ASCII_AMBLEM = r"""
-                \   |   /
-              \  \  |  /  /
-                \ \ | / /
-          -- -- -- () -- -- --
-                / / | \ \
-              /  /  |  \  \
-                /   |   \
+                 _________
+                |   ____  |
+                |  |    | |
+                |  |____| |
+                |_________|
+                 |       |
+                _|_______|_
+               [___________]
 """
 
+# "ERDEMUSB" - pyfiglet standard font. MARKA degistirilirse bu blok da
+# (python -c "import pyfiglet; print(pyfiglet.Figlet(font='standard').renderText('YENI_AD'))")
+# ile yeniden uretilip burada elle guncellenmeli.
 ASCII_BASLIK = r"""
- ____  _ _   _  ___  ____    ____  _____ _     _____ ____ _____     _______ ____ ___
-/ ___|(_) \ | |/ _ \|  _ \  | __ )| ____| |   | ____|  _ \_ _\ \   / / ____/ ___|_ _|
-\___ \| |  \| | | | | |_) | |  _ \|  _| | |   |  _| | | | | | \ \ / /|  _| \___ \| |
- ___) | | |\  | |_| |  __/  | |_) | |___| |___| |___| |_| | |  \ V / | |___ ___) | |
-|____/|_|_| \_|\___/|_|     |____/|_____|_____|_____|____/___|  \_/  |_____|____/___|
+ _____ ____  ____  _____ __  __ _   _ ____  ____
+| ____|  _ \|  _ \| ____|  \/  | | | / ___|| __ )
+|  _| | |_) | | | |  _| | |\/| | | | \___ \|  _ \
+| |___|  _ <| |_| | |___| |  | | |_| |___) | |_) |
+|_____|_| \_\____/|_____|_|  |_|\___/|____/|____/
 """
 
 
@@ -150,19 +221,29 @@ def _ortala_blok(metin: str, genislik: int) -> str:
     return "\n".join((" " * sol_bosluk) + s if s.strip() else s for s in satirlar)
 
 
+def _renkli_blok(metin: str, *renkler: str) -> str:
+    """_ortala_blok ile zaten ortalanmis bir metnin her satirini ayri ayri
+    renklendirir (ortalama icin eklenen bosluklar renklendirmeden once
+    satirin basina girmis olmali, yoksa dolgu miktari bozulur)."""
+    if not RENK_ACIK or not renkler:
+        return metin
+    return "\n".join(r(satir, *renkler) if satir.strip() else satir for satir in metin.split("\n"))
+
+
 def baslik():
+    renklendir_etkinlestir()
     os.system("cls" if os.name == "nt" else "clear")
     try:
         genislik = os.get_terminal_size().columns
     except OSError:
         genislik = 90
 
-    print(_ortala_blok(ASCII_AMBLEM, genislik))
-    print(_ortala_blok(ASCII_BASLIK, genislik))
-    print("TEKNIK DESTEK TERMINALI".center(genislik))
-    print("(Kurulum gerektirmez - USB'den calisir)".center(genislik))
+    print(_renkli_blok(_ortala_blok(ASCII_AMBLEM, genislik), Renk.TURUNCU))
+    print(_renkli_blok(_ortala_blok(ASCII_BASLIK, genislik), Renk.KALIN, Renk.CYAN))
+    print(r(f"{MARKA} TEKNIK DESTEK TERMINALI".center(genislik), Renk.KALIN, Renk.BEYAZ))
+    print(r("(Kurulum gerektirmez - USB'den calisir)".center(genislik), Renk.GRI))
     print()
-    print("=" * min(87, genislik))
+    print(r("=" * min(87, genislik), Renk.SONUK))
     print()
 
 
@@ -459,32 +540,44 @@ def arac_ag_sifirla(params):
 
 ARAC_KAYDI = {
     # ---- salt okunur (onay istemez) ----
-    "hiz_raporu": {"aciklama": "Yavasligin nedenlerini ozetler: Windows surumu, RAM, disk turu (HDD/SSD), bos alan, acilis programi sayisi, guc plani, gorsel efektler, gecici dosya boyutu (salt okunur).", "params": {}, "destructive": False, "fn": arac_hiz_raporu},
-    "disk_durumu": {"aciklama": "Disklerin toplam/bos alanini ve doluluk oranini gosterir (salt okunur).", "params": {}, "destructive": False, "fn": arac_disk_durumu},
-    "disk_sagligi": {"aciklama": "Fiziksel disklerin saglik durumu, sicaklik, asinma ve hata sayaclari (SMART) (salt okunur).", "params": {}, "destructive": False, "fn": arac_disk_sagligi},
-    "event_log_oku": {"aciklama": "Windows Sistem gunlugundeki son hata kayitlarini okur (salt okunur).", "params": {"adet": "integer, opsiyonel, varsayilan 15"}, "destructive": False, "fn": arac_event_log},
-    "servis_durumu": {"aciklama": "Belirli bir Windows servisinin durumunu, ya da calismayan otomatik servisleri listeler (salt okunur).", "params": {"servis_adi": "string, opsiyonel"}, "destructive": False, "fn": arac_servis_durumu},
-    "baslangic_programlari": {"aciklama": "Windows acilisinda otomatik calisan programlari listeler (salt okunur).", "params": {}, "destructive": False, "fn": arac_baslangic_programlari},
-    "kaynak_kullanimi": {"aciklama": "Anlik CPU/RAM kullanimi ve su an en cok CPU ve RAM kullanan surecler (salt okunur).", "params": {}, "destructive": False, "fn": arac_kaynak_kullanimi},
-    "surucu_sorunlari": {"aciklama": "Aygit Yoneticisi'nde sorunlu/unlemli aygitlari listeler (salt okunur).", "params": {}, "destructive": False, "fn": arac_surucu_sorunlari},
-    "ag_durumu": {"aciklama": "Ag adaptorlerinin IP/DNS/durumunu gosterir (salt okunur).", "params": {}, "destructive": False, "fn": arac_ag_durumu},
+    "hiz_raporu": {"kategori": "teshis", "aciklama": "Yavasligin nedenlerini ozetler: Windows surumu, RAM, disk turu (HDD/SSD), bos alan, acilis programi sayisi, guc plani, gorsel efektler, gecici dosya boyutu (salt okunur).", "params": {}, "destructive": False, "fn": arac_hiz_raporu},
+    "disk_durumu": {"kategori": "teshis", "aciklama": "Disklerin toplam/bos alanini ve doluluk oranini gosterir (salt okunur).", "params": {}, "destructive": False, "fn": arac_disk_durumu},
+    "disk_sagligi": {"kategori": "teshis", "aciklama": "Fiziksel disklerin saglik durumu, sicaklik, asinma ve hata sayaclari (SMART) (salt okunur).", "params": {}, "destructive": False, "fn": arac_disk_sagligi},
+    "event_log_oku": {"kategori": "teshis", "aciklama": "Windows Sistem gunlugundeki son hata kayitlarini okur (salt okunur).", "params": {"adet": "integer, opsiyonel, varsayilan 15"}, "destructive": False, "fn": arac_event_log},
+    "servis_durumu": {"kategori": "teshis", "aciklama": "Belirli bir Windows servisinin durumunu, ya da calismayan otomatik servisleri listeler (salt okunur).", "params": {"servis_adi": "string, opsiyonel"}, "destructive": False, "fn": arac_servis_durumu},
+    "baslangic_programlari": {"kategori": "teshis", "aciklama": "Windows acilisinda otomatik calisan programlari listeler (salt okunur).", "params": {}, "destructive": False, "fn": arac_baslangic_programlari},
+    "kaynak_kullanimi": {"kategori": "teshis", "aciklama": "Anlik CPU/RAM kullanimi ve su an en cok CPU ve RAM kullanan surecler (salt okunur).", "params": {}, "destructive": False, "fn": arac_kaynak_kullanimi},
+    "surucu_sorunlari": {"kategori": "teshis", "aciklama": "Aygit Yoneticisi'nde sorunlu/unlemli aygitlari listeler (salt okunur).", "params": {}, "destructive": False, "fn": arac_surucu_sorunlari},
+    "ag_durumu": {"kategori": "ag", "aciklama": "Ag adaptorlerinin IP/DNS/durumunu gosterir (salt okunur).", "params": {}, "destructive": False, "fn": arac_ag_durumu},
     # ---- sistemi degistirir (her zaman onay ister) ----
-    "geri_yukleme_noktasi": {"aciklama": "Onarimdan once sistem geri yukleme noktasi olusturur, risk azaltir.", "params": {"aciklama": "string, opsiyonel"}, "destructive": True, "fn": arac_geri_yukleme_noktasi},
-    "disk_temizligi": {"aciklama": "Gecici dosyalari, geri donusum kutusunu ve Disk Temizligi kategorilerini temizler, acilan alani soyler.", "params": {}, "destructive": True, "fn": arac_disk_temizligi},
-    "baslangic_programi_kapat": {"aciklama": "Bir acilis programini devre disi birakir (silmez, Gorev Yoneticisi'nden geri acilabilir).", "params": {"program_adi": "string, zorunlu, baslangic_programlari listesindeki ad"}, "destructive": True, "fn": arac_baslangic_programi_kapat},
-    "guc_plani_yuksek": {"aciklama": "Guc planini Yuksek Performans yapar (masaustu PC icin; dizustunde pili daha hizli tuketir).", "params": {}, "destructive": True, "fn": arac_guc_plani_yuksek},
-    "gorsel_efekt_performans": {"aciklama": "Animasyon ve gorsel efektleri kapatip en iyi performansa ayarlar (eski PC'lerde belirgin hizlanma).", "params": {}, "destructive": True, "fn": arac_gorsel_efekt_performans},
-    "uygulamalari_guncelle": {"aciklama": "Yuklu programlarin hepsini winget ile gunceller (internet gerekir, uzun surebilir).", "params": {}, "destructive": True, "fn": arac_uygulamalari_guncelle},
-    "windows_update_tara": {"aciklama": "Windows Update taramasini baslatir ve ayarlar sayfasini acar.", "params": {}, "destructive": True, "fn": arac_windows_update_tara},
-    "defender_tarama": {"aciklama": "Virus tanimlarini gunceller ve Windows Defender ile hizli (Quick) veya tam (Full) tarama yapar.", "params": {"tur": "string, opsiyonel, 'Quick' veya 'Full', varsayilan 'Quick'"}, "destructive": True, "fn": arac_defender_tarama},
-    "sfc_tarama": {"aciklama": "sfc /scannow calistirir, bozuk sistem dosyalarini onarir.", "params": {}, "destructive": True, "fn": arac_sfc_scan},
-    "dism_onarim": {"aciklama": "DISM /RestoreHealth calistirir, Windows bilesen deposunu onarir.", "params": {}, "destructive": True, "fn": arac_dism_repair},
-    "disk_kontrolu": {"aciklama": "chkdsk /scan ile diskte hata taramasi yapar (cevrimici tarama, yeniden baslatma gerektirmez).", "params": {"surucu": "string, opsiyonel, varsayilan 'C:'"}, "destructive": True, "fn": arac_chkdsk},
-    "dns_temizle": {"aciklama": "DNS onbellegini temizler (ipconfig /flushdns).", "params": {}, "destructive": True, "fn": arac_dns_flush},
-    "ip_yenile": {"aciklama": "IP adresini yeniler (ipconfig /release + /renew).", "params": {}, "destructive": True, "fn": arac_ip_renew},
-    "ag_sifirla": {"aciklama": "Winsock ve TCP/IP yiginini sifirlar (inatci internet sorunlari icin, yeniden baslatma gerekir).", "params": {}, "destructive": True, "fn": arac_ag_sifirla},
-    "yazici_kuyrugu_temizle": {"aciklama": "Yazdirma kuyrugunu temizler ve Spooler servisini yeniden baslatir.", "params": {}, "destructive": True, "fn": arac_yazici_kuyrugu_temizle},
-    "windows_update_sifirla": {"aciklama": "Windows Update bilesenlerini (SoftwareDistribution, catroot2) sifirlar. Yeniden baslatma gerektirir.", "params": {}, "destructive": True, "fn": arac_windows_update_sifirla},
+    "geri_yukleme_noktasi": {"kategori": "guvenlik", "aciklama": "Onarimdan once sistem geri yukleme noktasi olusturur, risk azaltir.", "params": {"aciklama": "string, opsiyonel"}, "destructive": True, "fn": arac_geri_yukleme_noktasi},
+    "disk_temizligi": {"kategori": "hizlandirma", "aciklama": "Gecici dosyalari, geri donusum kutusunu ve Disk Temizligi kategorilerini temizler, acilan alani soyler.", "params": {}, "destructive": True, "fn": arac_disk_temizligi},
+    "baslangic_programi_kapat": {"kategori": "hizlandirma", "aciklama": "Bir acilis programini devre disi birakir (silmez, Gorev Yoneticisi'nden geri acilabilir).", "params": {"program_adi": "string, zorunlu, baslangic_programlari listesindeki ad"}, "destructive": True, "fn": arac_baslangic_programi_kapat},
+    "guc_plani_yuksek": {"kategori": "hizlandirma", "aciklama": "Guc planini Yuksek Performans yapar (masaustu PC icin; dizustunde pili daha hizli tuketir).", "params": {}, "destructive": True, "fn": arac_guc_plani_yuksek},
+    "gorsel_efekt_performans": {"kategori": "hizlandirma", "aciklama": "Animasyon ve gorsel efektleri kapatip en iyi performansa ayarlar (eski PC'lerde belirgin hizlanma).", "params": {}, "destructive": True, "fn": arac_gorsel_efekt_performans},
+    "uygulamalari_guncelle": {"kategori": "hizlandirma", "aciklama": "Yuklu programlarin hepsini winget ile gunceller (internet gerekir, uzun surebilir).", "params": {}, "destructive": True, "fn": arac_uygulamalari_guncelle},
+    "windows_update_tara": {"kategori": "sistem", "aciklama": "Windows Update taramasini baslatir ve ayarlar sayfasini acar.", "params": {}, "destructive": True, "fn": arac_windows_update_tara},
+    "defender_tarama": {"kategori": "guvenlik", "aciklama": "Virus tanimlarini gunceller ve Windows Defender ile hizli (Quick) veya tam (Full) tarama yapar.", "params": {"tur": "string, opsiyonel, 'Quick' veya 'Full', varsayilan 'Quick'"}, "destructive": True, "fn": arac_defender_tarama},
+    "sfc_tarama": {"kategori": "sistem", "aciklama": "sfc /scannow calistirir, bozuk sistem dosyalarini onarir.", "params": {}, "destructive": True, "fn": arac_sfc_scan},
+    "dism_onarim": {"kategori": "sistem", "aciklama": "DISM /RestoreHealth calistirir, Windows bilesen deposunu onarir.", "params": {}, "destructive": True, "fn": arac_dism_repair},
+    "disk_kontrolu": {"kategori": "disk", "aciklama": "chkdsk /scan ile diskte hata taramasi yapar (cevrimici tarama, yeniden baslatma gerektirmez).", "params": {"surucu": "string, opsiyonel, varsayilan 'C:'"}, "destructive": True, "fn": arac_chkdsk},
+    "dns_temizle": {"kategori": "ag", "aciklama": "DNS onbellegini temizler (ipconfig /flushdns).", "params": {}, "destructive": True, "fn": arac_dns_flush},
+    "ip_yenile": {"kategori": "ag", "aciklama": "IP adresini yeniler (ipconfig /release + /renew).", "params": {}, "destructive": True, "fn": arac_ip_renew},
+    "ag_sifirla": {"kategori": "ag", "aciklama": "Winsock ve TCP/IP yiginini sifirlar (inatci internet sorunlari icin, yeniden baslatma gerekir).", "params": {}, "destructive": True, "fn": arac_ag_sifirla},
+    "yazici_kuyrugu_temizle": {"kategori": "sistem", "aciklama": "Yazdirma kuyrugunu temizler ve Spooler servisini yeniden baslatir.", "params": {}, "destructive": True, "fn": arac_yazici_kuyrugu_temizle},
+    "windows_update_sifirla": {"kategori": "sistem", "aciklama": "Windows Update bilesenlerini (SoftwareDistribution, catroot2) sifirlar. Yeniden baslatma gerektirir.", "params": {}, "destructive": True, "fn": arac_windows_update_sifirla},
+}
+
+# Araclarin "hizli" menusunde gruplandigi kategoriler - (baslik, renk).
+# Siralama burada belirlenir: once salt okunur teshisler, sonra onarim/
+# hizlandirma kategorileri.
+KATEGORILER = {
+    "teshis": ("TESHIS (salt okunur, direkt calisir)", Renk.CYAN),
+    "hizlandirma": ("HIZLANDIRMA", Renk.YESIL),
+    "guvenlik": ("GUVENLIK", Renk.SARI),
+    "ag": ("AG", Renk.MAVI),
+    "disk": ("DISK", Renk.MOR),
+    "sistem": ("SISTEM ONARIMI", Renk.KIRMIZI),
 }
 
 
@@ -523,10 +616,10 @@ def arac_cagir(ad: str, params: dict) -> str:
 
     bilgi = ARAC_KAYDI[ad]
     if bilgi["destructive"]:
-        print(f"\n[Onarim araci]: {ad} - {bilgi['aciklama']}")
+        print(r(f"\n[Onarim araci]: {ad}", Renk.KALIN, Renk.SARI) + f" - {bilgi['aciklama']}")
         if os.name == "nt" and not yonetici_mi():
-            print("  UYARI: Program yonetici olarak calismiyor; bu islem basarisiz olabilir.")
-        onay = input("  Calistirilsin mi? [E/h]: ").strip().lower()
+            print(r("  UYARI: Program yonetici olarak calismiyor; bu islem basarisiz olabilir.", Renk.KIRMIZI))
+        onay = input(r("  Calistirilsin mi? [E/h]: ", Renk.SARI)).strip().lower()
         if onay not in ("e", "evet", "y", "yes"):
             log(f"REDDEDILDI (AI araci): {ad}")
             OTURUM_GECMISI.append({
@@ -596,8 +689,9 @@ def _deepseek_istek(messages, tools):
 
 def deepseek_ajan(kullanici_sorunu: str, ozet: dict) -> str:
     sistem_mesaji = (
-        "Sen bir Windows sistem teknisyeni yardimcisisin. Belediye BT "
-        "teknisyeninin sahada kullandigi bir terminal uzerinden calisiyorsun. "
+        "Sen bir Windows sistem teknisyeni yardimcisisin. Sahada kullanilan "
+        "tasinabilir bir teknik destek terminali (USB'den calisan) uzerinden "
+        "calisiyorsun. "
         "Turkce konus. Elinde gercek sistem bilgisi toplamak ve onarim "
         "yapmak icin ARACLAR (tools) var: disk/servis/event-log okuma gibi "
         "salt okunur araclari istedigin kadar, geregi kadar cagirabilirsin. "
@@ -761,25 +855,41 @@ def yerel_teshis(sorun_metni: str) -> str:
 # ------------------------------------------------------------------
 
 def hizli_komut_menusu():
-    destructive_araclar = [(ad, b) for ad, b in ARAC_KAYDI.items() if b["destructive"]]
-    print("\nHizli onarim komutlari (her biri icin onay istenir):")
-    for i, (ad, bilgi) in enumerate(destructive_araclar, 1):
-        print(f"  [{i}] {bilgi['aciklama']}")
-    print("  [0] Geri don")
-    secim = input("Secim: ").strip()
+    """Butun araclari (salt okunur + onarim/hizlandirma) kategorilere
+    ayrilmis, renkli, numarali tek bir listede gosterir. Salt okunur
+    araclar hemen calisir; digerleri arac_cagir() icindeki onay adimindan
+    gecer. Siralama ARAC_KAYDI'nin tek kaynagindan turer, baska yerde
+    ayrica tutulmaz."""
+    sirali = []
+    print(r("\n  TUM ARACLAR", Renk.KALIN, Renk.BEYAZ))
+    for kat_id, (kat_baslik, kat_renk) in KATEGORILER.items():
+        kat_araclar = [(ad, b) for ad, b in ARAC_KAYDI.items() if b["kategori"] == kat_id]
+        if not kat_araclar:
+            continue
+        print(r(f"\n  -- {kat_baslik} --", Renk.KALIN, kat_renk))
+        for ad, bilgi in kat_araclar:
+            sirali.append((ad, bilgi))
+            etiket = r("[salt okunur]", Renk.GRI) if not bilgi["destructive"] else r("[onay gerekir]", Renk.SARI)
+            print(f"   {r(f'[{len(sirali)}]', kat_renk)} {bilgi['aciklama']} {etiket}")
+    print(f"\n   {r('[0]', Renk.GRI)} Geri don")
+    secim = input(r("\nSecim: ", Renk.KALIN)).strip()
     if secim == "0" or not secim.isdigit():
         return
     idx = int(secim) - 1
-    if idx < 0 or idx >= len(destructive_araclar):
-        print("Gecersiz secim.")
+    if idx < 0 or idx >= len(sirali):
+        print(r("Gecersiz secim.", Renk.KIRMIZI))
         return
-    ad, bilgi = destructive_araclar[idx]
+    ad, bilgi = sirali[idx]
     params = {}
     for p_ad, p_aciklama in bilgi["params"].items():
         if "zorunlu" in p_aciklama:
             if ad == "baslangic_programi_kapat":
                 print(arac_cagir("baslangic_programlari", {}))
             params[p_ad] = input(f"  {p_ad} ({p_aciklama}): ").strip()
+        elif "opsiyonel" in p_aciklama:
+            deger = input(f"  {p_ad} ({p_aciklama}, bos=varsayilan): ").strip()
+            if deger:
+                params[p_ad] = deger
     sonuc = arac_cagir(ad, params)
     print("\n" + sonuc)
 
@@ -802,17 +912,17 @@ SIK_SORUNLAR = [
 
 
 def sik_sorunlar_menusu():
-    print("\nSik karsilasilan sorunlar:")
-    for i, s in enumerate(SIK_SORUNLAR, 1):
-        print(f"  [{i}] {s}")
-    print("  [0] Geri don (kendi cumlemi yazacagim)")
-    secim = input("Secim: ").strip()
+    print(r("\nSik karsilasilan sorunlar:", Renk.KALIN, Renk.CYAN))
+    for i, soru in enumerate(SIK_SORUNLAR, 1):
+        print(f"  {r(f'[{i}]', Renk.CYAN)} {soru}")
+    print(f"  {r('[0]', Renk.GRI)} Geri don (kendi cumlemi yazacagim)")
+    secim = input(r("Secim: ", Renk.KALIN)).strip()
     if secim == "0" or not secim.isdigit():
         return None
     idx = int(secim) - 1
     if 0 <= idx < len(SIK_SORUNLAR):
         return SIK_SORUNLAR[idx]
-    print("Gecersiz secim.")
+    print(r("Gecersiz secim.", Renk.KIRMIZI))
     return None
 
 
@@ -849,7 +959,7 @@ def ozet_rapor_yaz(demirbas_no: str, gorusme_ozeti: list):
     rapor_yolu = os.path.join(RAPOR_DIR, f"rapor_{datetime.now():%Y%m%d_%H%M%S}.txt")
     try:
         with open(rapor_yolu, "w", encoding="utf-8") as f:
-            f.write("BELEDIYE TEKNIK DESTEK TERMINALI - OTURUM OZETI\n")
+            f.write(f"{MARKA} - OTURUM OZETI\n")
             f.write("=" * 55 + "\n")
             f.write(f"Tarih/Saat : {datetime.now():%Y-%m-%d %H:%M:%S}\n")
             f.write(f"Demirbas/PC: {demirbas_no or '(belirtilmedi)'}\n\n")
@@ -888,15 +998,27 @@ HIZLANDIRMA_ADIMLARI = [
 ]
 
 
+BOLT_ICON = r"""
+     __/|
+     \ |
+      \|
+      /|
+     / |
+    /__|
+"""
+
+
 def hizlandirma_sihirbazi() -> str:
-    print("\n=== HIZLANDIRMA SIHIRBAZI ===")
+    print(r(BOLT_ICON, Renk.SARI))
+    print(r("  HIZLANDIRMA SIHIRBAZI", Renk.KALIN, Renk.YESIL))
+    print(r("  " + "=" * 50, Renk.SONUK))
     print("Once bu PC'nin neden yavas oldugunu ozetliyorum, sonra her adimi tek tek soruyorum.\n")
     rapor = arac_cagir("hiz_raporu", {})
     print(rapor)
 
-    print("\n--- Acilista calisan programlar ---")
+    print(r("\n-- Acilista calisan programlar --", Renk.KALIN, Renk.CYAN))
     print(arac_cagir("baslangic_programlari", {}))
-    secim = input("Acilista kapatilacak programlarin adlarini virgulle yaz (bos = atla): ").strip()
+    secim = input(r("Acilista kapatilacak programlarin adlarini virgulle yaz (bos = atla): ", Renk.KALIN)).strip()
     for ad in [a.strip() for a in secim.split(",") if a.strip()]:
         print(arac_cagir("baslangic_programi_kapat", {"program_adi": ad}))
 
@@ -904,7 +1026,7 @@ def hizlandirma_sihirbazi() -> str:
     yapilan = []
     for adim in HIZLANDIRMA_ADIMLARI:
         if adim == "guc_plani_yuksek" and dizustu:
-            print("\n(Dizustu bilgisayar: Yuksek Performans guc plani pili hizli bitirecegi icin atlandi.)")
+            print(r("\n(Dizustu bilgisayar: Yuksek Performans guc plani pili hizli bitirecegi icin atlandi.)", Renk.GRI))
             continue
         sonuc = arac_cagir(adim, {})
         print(sonuc)
@@ -920,7 +1042,7 @@ def hizlandirma_sihirbazi() -> str:
     oneriler.append("Bilgisayari simdi yeniden baslatin; yapilan ayarlarin bir kismi ancak yeniden baslatinca etkili olur.")
 
     ozet = "Hizlandirma sihirbazi - uygulanan adimlar: " + (", ".join(yapilan) or "yok") + "\n" + "\n".join("- " + o for o in oneriler)
-    print("\n" + ozet)
+    print("\n" + r("Ozet", Renk.KALIN, Renk.YESIL) + "\n" + ozet)
     return ozet
 
 
@@ -933,39 +1055,41 @@ def main():
     log("Terminal baslatildi.")
 
     if os.name == "nt" and not yonetici_mi():
-        print("Bu program yonetici olarak calismiyor. Onarim ve hizlandirma araclarinin")
+        print(r("Bu program yonetici olarak calismiyor.", Renk.SARI) + " Onarim ve hizlandirma araclarinin")
         print("cogu (sfc, DISM, disk temizligi, guc plani, geri yukleme noktasi) yonetici ister.")
-        if input("Yonetici olarak yeniden acilsin mi? [E/h]: ").strip().lower() in ("", "e", "evet", "y", "yes"):
+        if input(r("Yonetici olarak yeniden acilsin mi? [E/h]: ", Renk.KALIN)).strip().lower() in ("", "e", "evet", "y", "yes"):
             if yonetici_olarak_yeniden_ac():
                 log("Yonetici olarak yeniden acildi, bu pencere kapaniyor.")
                 return
-            print("Yonetici olarak acilamadi; salt okunur teshis araclari yine calisir.\n")
+            print(r("Yonetici olarak acilamadi; salt okunur teshis araclari yine calisir.\n", Renk.GRI))
 
     if os.path.exists(LOGO_PNG):
-        logo_sec = input("Sinop Belediyesi logosunu ayri pencerede acmak ister misin? [e/H]: ").strip().lower()
+        logo_sec = input("Logoyu ayri pencerede acmak ister misin? [e/H]: ").strip().lower()
         if logo_sec in ("e", "evet", "y", "yes"):
             logo_ac()
 
-    demirbas_no = input("Demirbas/PC adi ya da no (bos birakabilirsin): ").strip()
+    demirbas_no = input(r("Demirbas/PC adi ya da no (bos birakabilirsin): ", Renk.KALIN)).strip()
     log(f"Demirbas/PC: {demirbas_no or '(belirtilmedi)'}")
 
     online = internet_var_mi()
     if online:
-        print("\nInternet baglantisi bulundu -> DeepSeek AI ajan modu aktif.")
-        print("(AI, gerektiginde teshis araclarini kendisi cagirir; sistemi")
-        print(" degistiren her islem icin senden onay ister.)\n")
+        print(r("\nInternet baglantisi bulundu -> DeepSeek AI ajan modu aktif.", Renk.YESIL))
+        print(r("(AI, gerektiginde teshis araclarini kendisi cagirir; sistemi", Renk.GRI))
+        print(r(" degistiren her islem icin senden onay ister.)\n", Renk.GRI))
     else:
-        print("\nInternet baglantisi yok -> Yerel teshis motoru calisacak.\n")
+        print(r("\nInternet baglantisi yok -> Yerel teshis motoru calisacak.\n", Renk.SARI))
 
     gorusme_ozeti = []
 
     while True:
-        print("-" * 60)
+        print(r("-" * 60, Renk.SONUK))
         print("Karsilastigin sorunu kisaca yaz (orn: 'bilgisayar cok yavas')")
-        print("Komutlar: 'hizlandir' = yavas PC'yi adim adim hizlandir,")
-        print("          'liste' = sik sorun listesi, 'hizli' = tek tek onarim araclari,")
-        print("          'cikis' = programi kapat")
-        sorun = input("\n> ").strip()
+        print(r("Komutlar:", Renk.KALIN)
+              + r(" 'hizlandir'", Renk.YESIL) + " = yavas PC'yi adim adim hizlandir,")
+        print(r("          'liste'", Renk.CYAN) + " = sik sorun listesi,"
+              + r(" 'hizli'", Renk.MOR) + " = tum araclar (kategorili menu),")
+        print(r("          'cikis'", Renk.GRI) + " = programi kapat")
+        sorun = input(r("\n> ", Renk.KALIN, Renk.BEYAZ)).strip()
 
         if sorun.lower() in ("cikis", "exit", "q"):
             log("Kullanici cikis yapti.")
@@ -992,7 +1116,7 @@ def main():
         log(f"Kullanici sorunu: {sorun}")
 
         if online and DEEPSEEK_API_KEY and "BURAYA" not in DEEPSEEK_API_KEY:
-            print("\nDeepSeek ajani calisiyor...\n")
+            print(r("\nDeepSeek ajani calisiyor...\n", Renk.MOR))
             ozet = sistem_ozeti()
             cevap = deepseek_ajan(sorun, ozet)
             print("\n" + cevap)
@@ -1009,10 +1133,10 @@ def main():
         demirbas_kaydet(demirbas_no, gorusme_ozeti[-1]["sorun"], gorusme_ozeti[-1]["cevap"])
         rapor_yolu = ozet_rapor_yaz(demirbas_no, gorusme_ozeti)
         if rapor_yolu:
-            print(f"\nOturum ozet raporu USB'ye kaydedildi: {rapor_yolu}")
+            print(r(f"\nOturum ozet raporu USB'ye kaydedildi: {rapor_yolu}", Renk.GRI))
 
-    print("\nTerminal kapatiliyor. Loglar:", LOG_FILE)
-    input("Cikmak icin Enter'a bas...")
+    print(r(f"\n{MARKA} kapatiliyor.", Renk.KALIN, Renk.CYAN), r("Loglar:", Renk.GRI), r(LOG_FILE, Renk.GRI))
+    input(r("Cikmak icin Enter'a bas...", Renk.SONUK))
 
 
 if __name__ == "__main__":
