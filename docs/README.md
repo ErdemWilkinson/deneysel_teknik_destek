@@ -25,13 +25,21 @@ kendin üretmen gerekiyor:
    kendi API anahtarını yaz (boş bırakırsan sorun değil, o zaman sadece
    internet gerektirmeyen yerel teşhis/hızlandırma araçları çalışır).
 3. Repo kökündeki **`HAZIRLA.bat`** dosyasına çift tıkla. Bu, Python
-   paketlerini kurar, `ONARIM_BASLAT.exe` ve `DINLEYICI.exe`'yi derler ve
-   doğru klasörlere (`usb-paket/`, `dagitim/`) otomatik kopyalar.
-4. `usb-paket/` klasörünün tamamını USB belleğine kopyala — artık her
-   PC'de `ONARIM_BASLAT.exe`'ye çift tıklayarak çalıştırabilirsin.
+   paketlerini kurar, **üç** exe'yi derler ve doğru klasörlere
+   (`usb-paket/`, `dagitim/`) otomatik kopyalar:
+   - `ONARIM_BASLAT.exe` — 2. adımda anahtar girdiysen AI destekli,
+     girmediysen zaten otomatik yerel çalışır.
+   - `ONARIM_BASLAT_YEREL.exe` — anahtar ne olursa olsun **internete/
+     DeepSeek'e hiçbir zaman bağlanmaz**, sadece yerel kural tabanlı
+     teşhis/hızlandırma araçlarını kullanır (`pc-terminal/derle_yerel.ps1`
+     anahtarı derleme sırasında geçici bir kopyada zorla devre dışı
+     bırakır).
+   - `DINLEYICI.exe` — PC'ye önceden kurulacak bildirim dinleyicisi.
+4. `usb-paket/` klasörünün tamamını USB belleğine kopyala — içinde her
+   iki `ONARIM_BASLAT*.exe` de var, hangisini istersen çift tıklarsın.
 5. (Opsiyonel) Bir PC'de bildirimli otomatik algılama istiyorsan:
-   `dagitim/DINLEYICI.exe` ve `dagitim/ONARIM_BASLAT.exe`'yi o PC'de bir
-   klasöre (örn. `C:\TeknikDestek\`) kopyala, `DINLEYICI.exe`'nin
+   `dagitim/DINLEYICI.exe` ve istediğin `ONARIM_BASLAT*.exe`'yi o PC'de
+   bir klasöre (örn. `C:\TeknikDestek\`) kopyala, `DINLEYICI.exe`'nin
    kısayolunu Windows Başlangıç klasörüne ekle (`Win+R` → `shell:startup`).
 
 ## Önemli: Donanım kısıtlaması ve mimari kararı
