@@ -13,6 +13,27 @@ Terminal (`ONARIM_BASLAT.exe`) renkli, kategorilere ayrılmış bir menüyle
 onaysız çalışmaz; salt okunur teşhis araçları dışındaki her şey açıkça
 `[E/h]` ile sorulur.
 
+## Hızlı başlangıç (ilk kurulum, tek tık)
+
+`.exe` dosyaları bilerek repoda **yok** (içlerine DeepSeek API anahtarın
+gömülebiliyor, güvenlik için GitHub'a girmiyor) — kendi PC'nde bir kere
+kendin üretmen gerekiyor:
+
+1. [Python](https://www.python.org/downloads/) kur — kurulum ekranında
+   **"Add python.exe to PATH"** kutusunu işaretlemeyi unutma.
+2. `pc-terminal/pc_terminal.py` içindeki `DEEPSEEK_API_KEY` değişkenine
+   kendi API anahtarını yaz (boş bırakırsan sorun değil, o zaman sadece
+   internet gerektirmeyen yerel teşhis/hızlandırma araçları çalışır).
+3. Repo kökündeki **`HAZIRLA.bat`** dosyasına çift tıkla. Bu, Python
+   paketlerini kurar, `ONARIM_BASLAT.exe` ve `DINLEYICI.exe`'yi derler ve
+   doğru klasörlere (`usb-paket/`, `dagitim/`) otomatik kopyalar.
+4. `usb-paket/` klasörünün tamamını USB belleğine kopyala — artık her
+   PC'de `ONARIM_BASLAT.exe`'ye çift tıklayarak çalıştırabilirsin.
+5. (Opsiyonel) Bir PC'de bildirimli otomatik algılama istiyorsan:
+   `dagitim/DINLEYICI.exe` ve `dagitim/ONARIM_BASLAT.exe`'yi o PC'de bir
+   klasöre (örn. `C:\TeknikDestek\`) kopyala, `DINLEYICI.exe`'nin
+   kısayolunu Windows Başlangıç klasörüne ekle (`Win+R` → `shell:startup`).
+
 ## Önemli: Donanım kısıtlaması ve mimari kararı
 
 Waveshare ESP32-P4-Pico'da **tek USB-C soketi**, kartın üzerindeki ayrı
