@@ -166,18 +166,27 @@ pc-listener/                 PC'ye önceden kurulacak dinleyici (DINLEYICI.exe)
 pc-terminal/                 Asıl onarım terminali (ONARIM_BASLAT.exe)
 pc-bridge/                   (Önceki) seri-port köprü prototipi — artık kullanılmıyor
 android-app/                 Telefon (Android) için ayrı, bağımsız hızlandırıcı uygulaması
+android-terminal/            PC'den ADB ile telefona bağlanan hızlandırıcı terminal (APK derlemek istemeyenler için)
 ```
 
 ## Android sürümü (telefon hızlandırıcı)
 
-`android-app/` klasöründe, PC tarafındaki `hizlandir` sihirbazının
-Android karşılığı olan, **ayrı bir uygulama** var: depolama/RAM/pil
-durumunu özetler, en çok yer kaplayan uygulamaları listeler, ilgili
-sistem ayarlarına (Depolama, Pil, Uygulamalar) tek dokunuşla götürür.
-Bu sürüm de **internet/yapay zekâ kullanmaz** — `AndroidManifest.xml`'de
-`INTERNET` izni bilerek yok, tüm teşhis cihaz üzerinde hesaplanır.
-Pico/USB ile ilgisi yoktur, bağımsız bir Android Studio projesidir.
-Derleme adımları: [android-app/README.md](../android-app/README.md).
+İki ayrı, bağımsız ve ikisi de **internet/yapay zekâ kullanmayan**
+seçenek var:
+
+1. **`android-app/`** — telefona kurulan bağımsız bir Android uygulaması.
+   Depolama/RAM/pil durumunu özetler, en çok yer kaplayan uygulamaları
+   listeler, ilgili sistem ayarlarına (Depolama, Pil, Uygulamalar) tek
+   dokunuşla götürür. `AndroidManifest.xml`'de `INTERNET` izni bilerek
+   yok. Android Studio ile derlenir: [android-app/README.md](../android-app/README.md).
+2. **`android-terminal/`** — APK derlemek istemeyenler için: telefonu
+   USB ile PC'ye bağlayıp, **PC'de çalışan bir terminalden** (ADB
+   üzerinden) yöneten script. `pc-terminal` ile aynı kategorili/onaylı
+   terminal deneyimi, ama hedefi telefon. Önbellek temizleme, animasyon
+   hızlandırma, uygulama durdurma/kaldırma gibi gerçek ADB komutlarıyla
+   çalışır, hiçbir komut onaysız çalışmaz: [android-terminal/README.md](../android-terminal/README.md).
+
+Pico/USB ile ikisinin de ilgisi yoktur, bağımsız araçlardır.
 
 ## Her PC'de çalışması (dinleyici kurulu olmayan PC'ler)
 
