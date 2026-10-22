@@ -32,6 +32,7 @@ Derleme (tek exe):
 """
 
 import csv
+import ctypes
 import json
 import os
 import platform
@@ -73,6 +74,33 @@ def log(msg: str):
             f.write(line + "\n")
     except OSError:
         pass
+
+
+# ------------------------------------------------------------------
+# Yonetici yetkisi - sfc, DISM, chkdsk, geri yukleme noktasi, disk temizligi
+# ve guc plani yonetici ister; yetkisiz acilan program bunlarda sessizce
+# basarisiz oluyordu.
+# ------------------------------------------------------------------
+
+def yonetici_mi() -> bool:
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def yonetici_olarak_yeniden_ac() -> bool:
+    """Programi UAC onayiyla yonetici olarak yeniden acar. Acildiysa True."""
+    try:
+        if getattr(sys, "frozen", False):
+            exe, argumanlar = sys.executable, sys.argv[1:]
+        else:
+            exe, argumanlar = sys.executable, [os.path.abspath(sys.argv[0])] + sys.argv[1:]
+        parametre = " ".join(f'"{a}"' for a in argumanlar)
+        return ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, parametre, USB_DIZIN, 1) > 32
+    except Exception as e:
+        log(f"Yonetici olarak yeniden acilamadi: {e}")
+        return False
 
 
 # Gercek logo dosyasi (PNG) varsa burada aranir; varsa acilista (istege
@@ -197,47 +225,123 @@ def _calistir(komut, timeout=180):
         return f"(hata: {e})"
 
 
+def _ps(betik, timeout=180):
+    """Bir PowerShell betigini calistirir (profil yuklemeden, betik politikasina takilmadan)."""
+    return _calistir(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", betik], timeout=timeout)
+
+
+# AI'nin gonderdigi parametreler komutlarin icine yazildigi icin yalnizca guvenli
+# karakterlere izin verilir; aksi halde "servis adi" yerine bir komut gonderilip
+# onaysiz calistirilabilirdi.
+_GUVENLI_AD = re.compile(r"^[A-Za-z0-9 _.\-]{1,64}$")
+_GUVENLI_SURUCU = re.compile(r"^[A-Za-z]:$")
+
+
+def _guvenli(deger, desen, varsayilan=""):
+    deger = str(deger or "").strip()
+    return deger if deger and desen.match(deger) else varsayilan
+
+
+def _c_bos_alan_gb():
+    try:
+        cikti = _ps("[math]::Round((Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='C:'\").FreeSpace/1GB,2)", timeout=30)
+        return float(cikti.strip().replace(",", "."))
+    except (ValueError, AttributeError):
+        return None
+
+
+# ---------------- salt okunur teshis araclari ----------------
+
 def arac_disk_durumu(params):
-    return _calistir(["wmic", "logicaldisk", "get", "size,freespace,caption"])
+    # wmic Windows 11 24H2'de kaldirildi; CIM her surumde calisir.
+    return _ps("Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | "
+               "Select-Object DeviceID,@{n='BoyutGB';e={[math]::Round($_.Size/1GB,1)}},"
+               "@{n='BosGB';e={[math]::Round($_.FreeSpace/1GB,1)}},"
+               "@{n='Doluluk%';e={[math]::Round(100-($_.FreeSpace/$_.Size*100))}} | Format-Table -AutoSize | Out-String")
 
 
 def arac_event_log(params):
-    adet = int(params.get("adet", 15)) if isinstance(params, dict) else 15
+    adet = int(params.get("adet", 15)) if isinstance(params, dict) and str(params.get("adet", "15")).isdigit() else 15
     adet = max(1, min(adet, 50))
-    return _calistir([
-        "powershell", "-NoProfile", "-Command",
-        f"Get-WinEvent -LogName System -MaxEvents {adet} -ErrorAction SilentlyContinue | "
-        "Where-Object {$_.LevelDisplayName -eq 'Error'} | "
-        "Select-Object TimeCreated,Id,ProviderName | Format-Table -AutoSize | Out-String"
-    ])
+    # Level=2 (Hata) dogrudan sorgulanir; once son N kaydi alip sonra suzmek cok az hata gosteriyordu.
+    return _ps(f"Get-WinEvent -FilterHashtable @{{LogName='System'; Level=2}} -MaxEvents {adet} -ErrorAction SilentlyContinue | "
+               "Select-Object TimeCreated,Id,ProviderName | Format-Table -AutoSize | Out-String")
 
 
 def arac_servis_durumu(params):
-    servis_adi = (params or {}).get("servis_adi", "")
+    servis_adi = _guvenli((params or {}).get("servis_adi"), _GUVENLI_AD)
     if servis_adi:
-        return _calistir(["powershell", "-NoProfile", "-Command",
-                           f"Get-Service -Name '{servis_adi}' | Format-List | Out-String"])
-    return _calistir(["powershell", "-NoProfile", "-Command",
-                       "Get-Service | Where-Object {$_.Status -eq 'Stopped' -and $_.StartType -eq 'Automatic'} | "
-                       "Select-Object Name,DisplayName,Status | Format-Table -AutoSize | Out-String"])
+        return _ps(f"Get-Service -Name '{servis_adi}' -ErrorAction SilentlyContinue | Format-List | Out-String")
+    return _ps("Get-Service | Where-Object {$_.Status -eq 'Stopped' -and $_.StartType -eq 'Automatic'} | "
+               "Select-Object Name,DisplayName,Status | Format-Table -AutoSize | Out-String")
 
 
 def arac_baslangic_programlari(params):
-    return _calistir(["powershell", "-NoProfile", "-Command",
-                       "Get-CimInstance Win32_StartupCommand | Select-Object Name,Command,Location | "
-                       "Format-Table -AutoSize | Out-String"])
+    return _ps("Get-CimInstance Win32_StartupCommand | Select-Object Name,Command,Location | Format-Table -AutoSize | Out-String")
 
 
 def arac_ag_durumu(params):
     return _calistir(["ipconfig", "/all"])
 
 
+def arac_kaynak_kullanimi(params):
+    # Get-Process'in CPU alani toplam calisma suresidir; anlik kullanim icin performans sayaclari okunur.
+    return _ps(
+        "$cpu = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average; "
+        "$os = Get-CimInstance Win32_OperatingSystem; "
+        "$kul = [math]::Round(($os.TotalVisibleMemorySize - $os.FreePhysicalMemory)/1MB,2); "
+        "$top = [math]::Round($os.TotalVisibleMemorySize/1MB,2); "
+        "Write-Output \"CPU kullanimi: %$cpu\"; Write-Output \"RAM kullanimi: $kul GB / $top GB\"; "
+        "Write-Output '--- Su an en cok CPU kullanan 5 surec ---'; "
+        "Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object {$_.Name -notin '_Total','Idle'} | "
+        "Sort-Object PercentProcessorTime -Descending | Select-Object -First 5 Name,PercentProcessorTime | Format-Table -AutoSize | Out-String; "
+        "Write-Output '--- En cok RAM kullanan 5 surec ---'; "
+        "Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 5 Name,@{n='RAM_MB';e={[math]::Round($_.WorkingSet64/1MB)}} | Format-Table -AutoSize | Out-String")
+
+
+def arac_hiz_raporu(params):
+    """Eski bir bilgisayarin neden yavas oldugunu tek bakista gosteren ozet."""
+    return _ps(
+        "$os = Get-CimInstance Win32_OperatingSystem; $cs = Get-CimInstance Win32_ComputerSystem; "
+        "$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1; "
+        "Write-Output ('Windows   : ' + $os.Caption + ' (' + $os.Version + ')'); "
+        "Write-Output ('Islemci   : ' + $cpu.Name.Trim() + ', ' + $cpu.NumberOfCores + ' cekirdek'); "
+        "Write-Output ('RAM       : ' + [math]::Round($cs.TotalPhysicalMemory/1GB,1) + ' GB'); "
+        "$up = (Get-Date) - $os.LastBootUpTime; Write-Output ('Acik kalma: ' + [int]$up.TotalDays + ' gun ' + $up.Hours + ' saat (uzun sure yeniden baslatilmadiysa yavaslar)'); "
+        "Write-Output '--- Diskler (HDD ise SSD en buyuk hiz farkini yaratir) ---'; "
+        "Get-PhysicalDisk | Select-Object FriendlyName,MediaType,@{n='BoyutGB';e={[math]::Round($_.Size/1GB)}},HealthStatus | Format-Table -AutoSize | Out-String; "
+        "$c = Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='C:'\"; "
+        "Write-Output ('C: bos alan: ' + [math]::Round($c.FreeSpace/1GB,1) + ' GB / ' + [math]::Round($c.Size/1GB,1) + ' GB'); "
+        "$bas = @(Get-CimInstance Win32_StartupCommand).Count; Write-Output ('Acilista calisan program sayisi: ' + $bas); "
+        "Write-Output ('Guc plani: ' + ((powercfg /getactivescheme) -replace '.*\\((.*)\\).*','$1')); "
+        "$vfx = (Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects' -ErrorAction SilentlyContinue).VisualFXSetting; "
+        "Write-Output ('Gorsel efektler: ' + $(if ($vfx -eq 2) {'performans icin ayarli'} else {'varsayilan (eski PC icin agir olabilir)'})); "
+        "$tmp = (Get-ChildItem $env:TEMP -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum; "
+        "Write-Output ('Gecici dosyalar (kullanici): ' + [math]::Round($tmp/1MB) + ' MB')",
+        timeout=120)
+
+
+def arac_disk_sagligi(params):
+    return _ps(
+        "Get-PhysicalDisk | Select-Object FriendlyName,MediaType,HealthStatus,OperationalStatus | Format-Table -AutoSize | Out-String; "
+        "Get-PhysicalDisk | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue | "
+        "Select-Object DeviceId,Temperature,Wear,ReadErrorsTotal,WriteErrorsTotal,PowerOnHours | Format-Table -AutoSize | Out-String", timeout=60)
+
+
+def arac_surucu_sorunlari(params):
+    return _ps("$s = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object {$_.Status -ne 'OK'}; "
+               "if ($s) { $s | Select-Object Status,Class,FriendlyName | Format-Table -AutoSize | Out-String } "
+               "else { 'Sorunlu (unlemli) aygit bulunmadi.' }", timeout=60)
+
+
+# ---------------- sistemi degistiren onarim / hizlandirma araclari ----------------
+
 def arac_sfc_scan(params):
-    return _calistir(["sfc", "/scannow"], timeout=600)
+    return _calistir(["sfc", "/scannow"], timeout=1200)
 
 
 def arac_dism_repair(params):
-    return _calistir(["DISM", "/Online", "/Cleanup-Image", "/RestoreHealth"], timeout=900)
+    return _calistir(["DISM", "/Online", "/Cleanup-Image", "/RestoreHealth"], timeout=1800)
 
 
 def arac_dns_flush(params):
@@ -250,170 +354,137 @@ def arac_ip_renew(params):
 
 
 def arac_disk_temizligi(params):
-    return _calistir(["cleanmgr", "/sagerun:1"], timeout=300)
+    """Gercekten yer acar: gecici klasorler, geri donusum kutusu ve Disk Temizligi'nin
+    tum kategorileri. ('cleanmgr /sagerun:1' onceden /sageset:1 ayari yapilmadiysa hicbir sey silmiyordu.)"""
+    once = _c_bos_alan_gb()
+    cikti = _ps(
+        "foreach ($k in @($env:TEMP, \"$env:WINDIR\\Temp\")) { Get-ChildItem -Path $k -Force -ErrorAction SilentlyContinue | "
+        "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue }; "
+        "Clear-RecycleBin -Force -ErrorAction SilentlyContinue; "
+        "$yol = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VolumeCaches'; "
+        "Get-ChildItem $yol -ErrorAction SilentlyContinue | ForEach-Object { "
+        "New-ItemProperty -Path $_.PSPath -Name StateFlags0099 -Value 2 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null }; "
+        "Start-Process cleanmgr -ArgumentList '/sagerun:99' -Wait; "
+        "Write-Output 'Gecici dosyalar, geri donusum kutusu ve Disk Temizligi kategorileri temizlendi.'", timeout=1800)
+    sonra = _c_bos_alan_gb()
+    if once is not None and sonra is not None:
+        cikti += f"\nC: bos alan: {once} GB -> {sonra} GB (acilan: {round(sonra - once, 2)} GB)"
+    return cikti
 
 
 def arac_yazici_kuyrugu_temizle(params):
-    return _calistir([
-        "powershell", "-NoProfile", "-Command",
-        "Stop-Service -Name Spooler -Force; "
-        "Remove-Item -Path 'C:\\Windows\\System32\\spool\\PRINTERS\\*' -Force -ErrorAction SilentlyContinue; "
-        "Start-Service -Name Spooler; "
-        "Write-Output 'Yazdirma kuyrugu temizlendi ve Spooler servisi yeniden baslatildi.'"
-    ], timeout=60)
+    return _ps("Stop-Service -Name Spooler -Force; "
+               "Remove-Item -Path 'C:\\Windows\\System32\\spool\\PRINTERS\\*' -Force -ErrorAction SilentlyContinue; "
+               "Start-Service -Name Spooler; Write-Output 'Yazdirma kuyrugu temizlendi ve Spooler servisi yeniden baslatildi.'", timeout=60)
 
 
 def arac_chkdsk(params):
-    surucu = (params or {}).get("surucu", "C:")
-    # /f ve /r kullanicinin onayiyla ve sadece /scan (read-only, yeniden
-    # baslatma gerektirmeyen) modunda calisir; tam onarim icin kullanici
-    # ayrica yeniden baslatmayi kendi yapar.
-    return _calistir(["chkdsk", surucu, "/scan"], timeout=600)
+    surucu = _guvenli((params or {}).get("surucu"), _GUVENLI_SURUCU, "C:")
+    # /scan cevrimici, salt taramadir; tam onarim (/f /r) yeniden baslatma ister, onu teknisyen ayrica yapar.
+    return _calistir(["chkdsk", surucu, "/scan"], timeout=1200)
 
 
 def arac_windows_update_sifirla(params):
-    return _calistir([
-        "powershell", "-NoProfile", "-Command",
-        "Stop-Service -Name wuauserv,bits,cryptsvc -Force -ErrorAction SilentlyContinue; "
-        "Rename-Item -Path 'C:\\Windows\\SoftwareDistribution' -NewName 'SoftwareDistribution.bak' -ErrorAction SilentlyContinue; "
-        "Rename-Item -Path 'C:\\Windows\\System32\\catroot2' -NewName 'catroot2.bak' -ErrorAction SilentlyContinue; "
-        "Start-Service -Name wuauserv,bits,cryptsvc -ErrorAction SilentlyContinue; "
-        "Write-Output 'Windows Update bilesenleri sifirlandi. Degisikligin etkili olmasi icin PC yeniden baslatilmali.'"
-    ], timeout=120)
+    return _ps("Stop-Service -Name wuauserv,bits,cryptsvc -Force -ErrorAction SilentlyContinue; "
+               "Rename-Item -Path 'C:\\Windows\\SoftwareDistribution' -NewName ('SoftwareDistribution.bak' + (Get-Date -Format yyyyMMddHHmm)) -ErrorAction SilentlyContinue; "
+               "Rename-Item -Path 'C:\\Windows\\System32\\catroot2' -NewName ('catroot2.bak' + (Get-Date -Format yyyyMMddHHmm)) -ErrorAction SilentlyContinue; "
+               "Start-Service -Name wuauserv,bits,cryptsvc -ErrorAction SilentlyContinue; "
+               "Write-Output 'Windows Update bilesenleri sifirlandi. Degisikligin etkili olmasi icin PC yeniden baslatilmali.'", timeout=120)
+
+
+def arac_windows_update_tara(params):
+    return _ps("Start-Process 'ms-settings:windowsupdate'; "
+               "Start-Process usoclient -ArgumentList 'StartInteractiveScan' -ErrorAction SilentlyContinue; "
+               "Write-Output 'Windows Update taramasi baslatildi ve ayarlar sayfasi acildi. Bulunan guncellemeleri oradan yukleyin.'", timeout=60)
 
 
 def arac_geri_yukleme_noktasi(params):
-    aciklama = (params or {}).get("aciklama", "Teknik Destek Terminali Onarim Oncesi")
-    return _calistir([
-        "powershell", "-NoProfile", "-Command",
-        "Enable-ComputerRestore -Drive 'C:\\' -ErrorAction SilentlyContinue; "
-        f"Checkpoint-Computer -Description '{aciklama}' -RestorePointType 'MODIFY_SETTINGS'; "
-        "Write-Output 'Geri yukleme noktasi olusturuldu (veya zaten yakin zamanda olusturulmus).'"
-    ], timeout=120)
-
-
-def arac_kaynak_kullanimi(params):
-    return _calistir([
-        "powershell", "-NoProfile", "-Command",
-        "$cpu = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average; "
-        "$ram = Get-CimInstance Win32_OperatingSystem; "
-        "$ramKullanimGB = [math]::Round(($ram.TotalVisibleMemorySize - $ram.FreePhysicalMemory)/1MB,2); "
-        "$ramToplamGB = [math]::Round($ram.TotalVisibleMemorySize/1MB,2); "
-        "Write-Output \"CPU kullanimi: %$cpu\"; "
-        "Write-Output \"RAM kullanimi: $ramKullanimGB GB / $ramToplamGB GB\"; "
-        "Write-Output '--- En cok CPU kullanan 5 surec ---'; "
-        "Get-Process | Sort-Object CPU -Descending | Select-Object -First 5 Name,CPU,WorkingSet | Format-Table -AutoSize | Out-String"
-    ])
+    aciklama = _guvenli((params or {}).get("aciklama"), _GUVENLI_AD, "Teknik Destek Terminali Onarim Oncesi")
+    # Windows varsayilan olarak 24 saatte birden fazla nokta olusturmaz; bu siniri bu islem icin kaldiriyoruz.
+    return _ps("Enable-ComputerRestore -Drive 'C:\\' -ErrorAction SilentlyContinue; "
+               "New-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRestore' "
+               "-Name SystemRestorePointCreationFrequency -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null; "
+               f"Checkpoint-Computer -Description '{aciklama}' -RestorePointType 'MODIFY_SETTINGS'; "
+               "Write-Output 'Geri yukleme noktasi olusturuldu.'", timeout=300)
 
 
 def arac_defender_tarama(params):
     tur = (params or {}).get("tur", "Quick")
     if tur not in ("Quick", "Full"):
         tur = "Quick"
-    return _calistir([
-        "powershell", "-NoProfile", "-Command",
-        f"Start-MpScan -ScanType {tur}; "
-        "Write-Output 'Tarama baslatildi/tamamlandi. Sonuclari Windows Guvenligi uygulamasindan da gorebilirsin.'"
-    ], timeout=900 if tur == "Full" else 300)
+    return _ps(f"Update-MpSignature -ErrorAction SilentlyContinue; Start-MpScan -ScanType {tur}; "
+               "Write-Output 'Tarama tamamlandi. Sonuclar Windows Guvenligi uygulamasinda.'", timeout=7200 if tur == "Full" else 1200)
+
+
+def arac_baslangic_programi_kapat(params):
+    """Bir acilis programini Gorev Yoneticisi'nin yaptigi gibi devre disi birakir (silmez, geri acilabilir)."""
+    ad = _guvenli((params or {}).get("program_adi"), _GUVENLI_AD)
+    if not ad:
+        return "Program adi gerekli (once 'baslangic_programlari' ile listeyi alin)."
+    return _ps(
+        f"$ad = '{ad}'; $bulundu = $false; "
+        "foreach ($kok in @('HKCU','HKLM')) { "
+        "  $run = \"${kok}:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\"; "
+        "  if ((Get-ItemProperty $run -ErrorAction SilentlyContinue).PSObject.Properties.Name -contains $ad) { "
+        "    $onay = \"${kok}:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run\"; "
+        "    if (-not (Test-Path $onay)) { New-Item -Path $onay -Force | Out-Null }; "
+        "    New-ItemProperty -Path $onay -Name $ad -PropertyType Binary -Value ([byte[]](3,0,0,0,0,0,0,0,0,0,0,0)) -Force | Out-Null; "
+        "    $bulundu = $true } }; "
+        "if ($bulundu) { \"'$ad' acilista calismayacak (Gorev Yoneticisi > Baslangic sekmesinden geri acilabilir).\" } "
+        "else { \"'$ad' Run anahtarlarinda bulunamadi; Baslangic klasorundeyse Gorev Yoneticisi'nden kapatin.\" }")
+
+
+def arac_guc_plani_yuksek(params):
+    return _ps("$h = powercfg /list | Select-String 'High performance|Yuksek performans|Yüksek performans'; "
+               "if (-not $h) { powercfg -duplicatescheme 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c | Out-Null }; "
+               "powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c; "
+               "Write-Output ('Etkin guc plani: ' + (powercfg /getactivescheme))")
+
+
+def arac_gorsel_efekt_performans(params):
+    return _ps("Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects' -Name VisualFXSetting -Value 2 -Type DWord; "
+               "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name MenuShowDelay -Value '50'; "
+               "Write-Output 'Gorsel efektler en iyi performansa ayarlandi. Tam etki icin oturumu kapatip acin.'")
+
+
+def arac_uygulamalari_guncelle(params):
+    return _calistir(["winget", "upgrade", "--all", "--silent", "--accept-package-agreements",
+                      "--accept-source-agreements", "--disable-interactivity"], timeout=3600)
+
+
+def arac_ag_sifirla(params):
+    return _ps("netsh winsock reset; netsh int ip reset; ipconfig /flushdns; "
+               "Write-Output 'Ag yigini sifirlandi. Yeniden baslatma gerekir.'")
 
 
 ARAC_KAYDI = {
-    "disk_durumu": {
-        "aciklama": "Disklerin toplam/bos alanini gosterir (salt okunur).",
-        "params": {},
-        "destructive": False,
-        "fn": arac_disk_durumu,
-    },
-    "event_log_oku": {
-        "aciklama": "Windows Sistem gunlugundeki son hata kayitlarini okur (salt okunur).",
-        "params": {"adet": "integer, opsiyonel, varsayilan 15"},
-        "destructive": False,
-        "fn": arac_event_log,
-    },
-    "servis_durumu": {
-        "aciklama": "Belirli bir Windows servisinin durumunu, ya da calismayan otomatik servisleri listeler (salt okunur).",
-        "params": {"servis_adi": "string, opsiyonel"},
-        "destructive": False,
-        "fn": arac_servis_durumu,
-    },
-    "baslangic_programlari": {
-        "aciklama": "Windows baslangicinda otomatik calisan programlari listeler (salt okunur).",
-        "params": {},
-        "destructive": False,
-        "fn": arac_baslangic_programlari,
-    },
-    "ag_durumu": {
-        "aciklama": "Ag adaptorlerinin IP/DNS/durumunu gosterir (salt okunur).",
-        "params": {},
-        "destructive": False,
-        "fn": arac_ag_durumu,
-    },
-    "sfc_tarama": {
-        "aciklama": "sfc /scannow calistirir, bozuk sistem dosyalarini onarir.",
-        "params": {},
-        "destructive": True,
-        "fn": arac_sfc_scan,
-    },
-    "dism_onarim": {
-        "aciklama": "DISM /RestoreHealth calistirir, Windows bilesen deposunu onarir.",
-        "params": {},
-        "destructive": True,
-        "fn": arac_dism_repair,
-    },
-    "dns_temizle": {
-        "aciklama": "DNS onbellegini temizler (ipconfig /flushdns).",
-        "params": {},
-        "destructive": True,
-        "fn": arac_dns_flush,
-    },
-    "ip_yenile": {
-        "aciklama": "IP adresini yeniler (ipconfig /release + /renew).",
-        "params": {},
-        "destructive": True,
-        "fn": arac_ip_renew,
-    },
-    "disk_temizligi": {
-        "aciklama": "Gecici dosyalari temizler (cleanmgr).",
-        "params": {},
-        "destructive": True,
-        "fn": arac_disk_temizligi,
-    },
-    "yazici_kuyrugu_temizle": {
-        "aciklama": "Yazdirma kuyrugunu ve Spooler servisini temizleyip yeniden baslatir.",
-        "params": {},
-        "destructive": True,
-        "fn": arac_yazici_kuyrugu_temizle,
-    },
-    "disk_kontrolu": {
-        "aciklama": "chkdsk /scan ile diskte hata taramasi yapar (salt tarama, dosya sistemini degistirmez).",
-        "params": {"surucu": "string, opsiyonel, varsayilan 'C:'"},
-        "destructive": True,
-        "fn": arac_chkdsk,
-    },
-    "windows_update_sifirla": {
-        "aciklama": "Windows Update bilesenlerini (SoftwareDistribution, catroot2) sifirlar. Yeniden baslatma gerektirir.",
-        "params": {},
-        "destructive": True,
-        "fn": arac_windows_update_sifirla,
-    },
-    "geri_yukleme_noktasi": {
-        "aciklama": "Onarimdan once sistem geri yukleme noktasi (restore point) olusturur, risk azaltir.",
-        "params": {"aciklama": "string, opsiyonel"},
-        "destructive": True,
-        "fn": arac_geri_yukleme_noktasi,
-    },
-    "kaynak_kullanimi": {
-        "aciklama": "Anlik CPU/RAM kullanimini ve en cok kaynak tuketen 5 sureci gosterir (salt okunur).",
-        "params": {},
-        "destructive": False,
-        "fn": arac_kaynak_kullanimi,
-    },
-    "defender_tarama": {
-        "aciklama": "Windows Defender ile hizli (Quick) veya tam (Full) virus taramasi baslatir.",
-        "params": {"tur": "string, opsiyonel, 'Quick' veya 'Full', varsayilan 'Quick'"},
-        "destructive": True,
-        "fn": arac_defender_tarama,
-    },
+    # ---- salt okunur (onay istemez) ----
+    "hiz_raporu": {"aciklama": "Yavasligin nedenlerini ozetler: Windows surumu, RAM, disk turu (HDD/SSD), bos alan, acilis programi sayisi, guc plani, gorsel efektler, gecici dosya boyutu (salt okunur).", "params": {}, "destructive": False, "fn": arac_hiz_raporu},
+    "disk_durumu": {"aciklama": "Disklerin toplam/bos alanini ve doluluk oranini gosterir (salt okunur).", "params": {}, "destructive": False, "fn": arac_disk_durumu},
+    "disk_sagligi": {"aciklama": "Fiziksel disklerin saglik durumu, sicaklik, asinma ve hata sayaclari (SMART) (salt okunur).", "params": {}, "destructive": False, "fn": arac_disk_sagligi},
+    "event_log_oku": {"aciklama": "Windows Sistem gunlugundeki son hata kayitlarini okur (salt okunur).", "params": {"adet": "integer, opsiyonel, varsayilan 15"}, "destructive": False, "fn": arac_event_log},
+    "servis_durumu": {"aciklama": "Belirli bir Windows servisinin durumunu, ya da calismayan otomatik servisleri listeler (salt okunur).", "params": {"servis_adi": "string, opsiyonel"}, "destructive": False, "fn": arac_servis_durumu},
+    "baslangic_programlari": {"aciklama": "Windows acilisinda otomatik calisan programlari listeler (salt okunur).", "params": {}, "destructive": False, "fn": arac_baslangic_programlari},
+    "kaynak_kullanimi": {"aciklama": "Anlik CPU/RAM kullanimi ve su an en cok CPU ve RAM kullanan surecler (salt okunur).", "params": {}, "destructive": False, "fn": arac_kaynak_kullanimi},
+    "surucu_sorunlari": {"aciklama": "Aygit Yoneticisi'nde sorunlu/unlemli aygitlari listeler (salt okunur).", "params": {}, "destructive": False, "fn": arac_surucu_sorunlari},
+    "ag_durumu": {"aciklama": "Ag adaptorlerinin IP/DNS/durumunu gosterir (salt okunur).", "params": {}, "destructive": False, "fn": arac_ag_durumu},
+    # ---- sistemi degistirir (her zaman onay ister) ----
+    "geri_yukleme_noktasi": {"aciklama": "Onarimdan once sistem geri yukleme noktasi olusturur, risk azaltir.", "params": {"aciklama": "string, opsiyonel"}, "destructive": True, "fn": arac_geri_yukleme_noktasi},
+    "disk_temizligi": {"aciklama": "Gecici dosyalari, geri donusum kutusunu ve Disk Temizligi kategorilerini temizler, acilan alani soyler.", "params": {}, "destructive": True, "fn": arac_disk_temizligi},
+    "baslangic_programi_kapat": {"aciklama": "Bir acilis programini devre disi birakir (silmez, Gorev Yoneticisi'nden geri acilabilir).", "params": {"program_adi": "string, zorunlu, baslangic_programlari listesindeki ad"}, "destructive": True, "fn": arac_baslangic_programi_kapat},
+    "guc_plani_yuksek": {"aciklama": "Guc planini Yuksek Performans yapar (masaustu PC icin; dizustunde pili daha hizli tuketir).", "params": {}, "destructive": True, "fn": arac_guc_plani_yuksek},
+    "gorsel_efekt_performans": {"aciklama": "Animasyon ve gorsel efektleri kapatip en iyi performansa ayarlar (eski PC'lerde belirgin hizlanma).", "params": {}, "destructive": True, "fn": arac_gorsel_efekt_performans},
+    "uygulamalari_guncelle": {"aciklama": "Yuklu programlarin hepsini winget ile gunceller (internet gerekir, uzun surebilir).", "params": {}, "destructive": True, "fn": arac_uygulamalari_guncelle},
+    "windows_update_tara": {"aciklama": "Windows Update taramasini baslatir ve ayarlar sayfasini acar.", "params": {}, "destructive": True, "fn": arac_windows_update_tara},
+    "defender_tarama": {"aciklama": "Virus tanimlarini gunceller ve Windows Defender ile hizli (Quick) veya tam (Full) tarama yapar.", "params": {"tur": "string, opsiyonel, 'Quick' veya 'Full', varsayilan 'Quick'"}, "destructive": True, "fn": arac_defender_tarama},
+    "sfc_tarama": {"aciklama": "sfc /scannow calistirir, bozuk sistem dosyalarini onarir.", "params": {}, "destructive": True, "fn": arac_sfc_scan},
+    "dism_onarim": {"aciklama": "DISM /RestoreHealth calistirir, Windows bilesen deposunu onarir.", "params": {}, "destructive": True, "fn": arac_dism_repair},
+    "disk_kontrolu": {"aciklama": "chkdsk /scan ile diskte hata taramasi yapar (cevrimici tarama, yeniden baslatma gerektirmez).", "params": {"surucu": "string, opsiyonel, varsayilan 'C:'"}, "destructive": True, "fn": arac_chkdsk},
+    "dns_temizle": {"aciklama": "DNS onbellegini temizler (ipconfig /flushdns).", "params": {}, "destructive": True, "fn": arac_dns_flush},
+    "ip_yenile": {"aciklama": "IP adresini yeniler (ipconfig /release + /renew).", "params": {}, "destructive": True, "fn": arac_ip_renew},
+    "ag_sifirla": {"aciklama": "Winsock ve TCP/IP yiginini sifirlar (inatci internet sorunlari icin, yeniden baslatma gerekir).", "params": {}, "destructive": True, "fn": arac_ag_sifirla},
+    "yazici_kuyrugu_temizle": {"aciklama": "Yazdirma kuyrugunu temizler ve Spooler servisini yeniden baslatir.", "params": {}, "destructive": True, "fn": arac_yazici_kuyrugu_temizle},
+    "windows_update_sifirla": {"aciklama": "Windows Update bilesenlerini (SoftwareDistribution, catroot2) sifirlar. Yeniden baslatma gerektirir.", "params": {}, "destructive": True, "fn": arac_windows_update_sifirla},
 }
 
 
@@ -452,7 +523,9 @@ def arac_cagir(ad: str, params: dict) -> str:
 
     bilgi = ARAC_KAYDI[ad]
     if bilgi["destructive"]:
-        print(f"\n[AI bir onarim araci cagirmak istiyor]: {ad} - {bilgi['aciklama']}")
+        print(f"\n[Onarim araci]: {ad} - {bilgi['aciklama']}")
+        if os.name == "nt" and not yonetici_mi():
+            print("  UYARI: Program yonetici olarak calismiyor; bu islem basarisiz olabilir.")
         onay = input("  Calistirilsin mi? [E/h]: ").strip().lower()
         if onay not in ("e", "evet", "y", "yes"):
             log(f"REDDEDILDI (AI araci): {ad}")
@@ -534,6 +607,11 @@ def deepseek_ajan(kullanici_sorunu: str, ozet: dict) -> str:
         "kalici olarak degistirecek riskli bir onarima (sfc_tarama, "
         "dism_onarim, windows_update_sifirla, disk_kontrolu) baslamadan once, "
         "uygunsa once geri_yukleme_noktasi aracini cagirmayi dikkate al. "
+        "Yavaslik sikayetlerinde once hiz_raporu aracini cagir; HDD, az RAM, dolu disk, "
+        "cok sayida acilis programi gibi nedenleri bul ve buna gore disk_temizligi, "
+        "baslangic_programi_kapat, gorsel_efekt_performans, guc_plani_yuksek, "
+        "uygulamalari_guncelle gibi araclari oner. Donanim kaynakli yavaslikta (HDD, 4 GB "
+        "alti RAM) SSD veya RAM yukseltmesini acikca soyle. "
         "Once gerekiyorsa 1-2 salt okunur aracla teshis bilgisi topla, sonra "
         "kisa ve net bir aciklama ile hangi onarimi onerdigini soyle ve "
         "gerekiyorsa ilgili onarim aracini cagir. Gereksiz yere cok fazla "
@@ -591,7 +669,8 @@ def deepseek_ajan(kullanici_sorunu: str, ozet: dict) -> str:
 # ------------------------------------------------------------------
 
 ANAHTAR_KELIME_KURALLARI = [
-    (["yavas", "donuyor", "kasiyor", "takiliyor"], [
+    (["yavas", "donuyor", "kasiyor", "takiliyor", "eski", "hizlandir"], [
+        "'hizlandir' yaz: hiz raporu cikarir ve hizlandirma adimlarini tek tek onayinla uygular.",
         "Baslangic programlarini kontrol et: msconfig veya Gorev Yoneticisi > "
         "Baslangic sekmesinden gereksiz programlari kapat.",
         "Disk doluluk oranini kontrol et (C: suruculer %90 uzeriyse yavaslar).",
@@ -695,7 +774,13 @@ def hizli_komut_menusu():
         print("Gecersiz secim.")
         return
     ad, bilgi = destructive_araclar[idx]
-    sonuc = arac_cagir(ad, {})
+    params = {}
+    for p_ad, p_aciklama in bilgi["params"].items():
+        if "zorunlu" in p_aciklama:
+            if ad == "baslangic_programi_kapat":
+                print(arac_cagir("baslangic_programlari", {}))
+            params[p_ad] = input(f"  {p_ad} ({p_aciklama}): ").strip()
+    sonuc = arac_cagir(ad, params)
     print("\n" + sonuc)
 
 
@@ -788,12 +873,73 @@ def ozet_rapor_yaz(demirbas_no: str, gorusme_ozeti: list):
 
 
 # ------------------------------------------------------------------
+# Hizlandirma sihirbazi - eski/yavaslamis bir PC icin adim adim, her
+# adimda onay isteyerek (AI'siz da calisir)
+# ------------------------------------------------------------------
+
+HIZLANDIRMA_ADIMLARI = [
+    "geri_yukleme_noktasi",
+    "disk_temizligi",
+    "gorsel_efekt_performans",
+    "guc_plani_yuksek",
+    "uygulamalari_guncelle",
+    "windows_update_tara",
+    "defender_tarama",
+]
+
+
+def hizlandirma_sihirbazi() -> str:
+    print("\n=== HIZLANDIRMA SIHIRBAZI ===")
+    print("Once bu PC'nin neden yavas oldugunu ozetliyorum, sonra her adimi tek tek soruyorum.\n")
+    rapor = arac_cagir("hiz_raporu", {})
+    print(rapor)
+
+    print("\n--- Acilista calisan programlar ---")
+    print(arac_cagir("baslangic_programlari", {}))
+    secim = input("Acilista kapatilacak programlarin adlarini virgulle yaz (bos = atla): ").strip()
+    for ad in [a.strip() for a in secim.split(",") if a.strip()]:
+        print(arac_cagir("baslangic_programi_kapat", {"program_adi": ad}))
+
+    dizustu = _ps("[bool](Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue)", timeout=30).strip().lower() == "true"
+    yapilan = []
+    for adim in HIZLANDIRMA_ADIMLARI:
+        if adim == "guc_plani_yuksek" and dizustu:
+            print("\n(Dizustu bilgisayar: Yuksek Performans guc plani pili hizli bitirecegi icin atlandi.)")
+            continue
+        sonuc = arac_cagir(adim, {})
+        print(sonuc)
+        if not sonuc.startswith("Kullanici bu islemi onaylamadi"):
+            yapilan.append(adim)
+
+    oneriler = []
+    if "HDD" in rapor or "Unspecified" in rapor:
+        oneriler.append("Disk HDD (ya da turu belirsiz) gorunuyor: SSD'ye gecmek en buyuk hiz farkini yaratir.")
+    m = re.search(r"RAM\s*:\s*([\d.,]+)\s*GB", rapor)
+    if m and float(m.group(1).replace(",", ".")) < 8:
+        oneriler.append(f"RAM {m.group(1)} GB: 8 GB veya uzerine cikarmak belirgin hizlandirir.")
+    oneriler.append("Bilgisayari simdi yeniden baslatin; yapilan ayarlarin bir kismi ancak yeniden baslatinca etkili olur.")
+
+    ozet = "Hizlandirma sihirbazi - uygulanan adimlar: " + (", ".join(yapilan) or "yok") + "\n" + "\n".join("- " + o for o in oneriler)
+    print("\n" + ozet)
+    return ozet
+
+
+# ------------------------------------------------------------------
 # Ana akis
 # ------------------------------------------------------------------
 
 def main():
     baslik()
     log("Terminal baslatildi.")
+
+    if os.name == "nt" and not yonetici_mi():
+        print("Bu program yonetici olarak calismiyor. Onarim ve hizlandirma araclarinin")
+        print("cogu (sfc, DISM, disk temizligi, guc plani, geri yukleme noktasi) yonetici ister.")
+        if input("Yonetici olarak yeniden acilsin mi? [E/h]: ").strip().lower() in ("", "e", "evet", "y", "yes"):
+            if yonetici_olarak_yeniden_ac():
+                log("Yonetici olarak yeniden acildi, bu pencere kapaniyor.")
+                return
+            print("Yonetici olarak acilamadi; salt okunur teshis araclari yine calisir.\n")
 
     if os.path.exists(LOGO_PNG):
         logo_sec = input("Sinop Belediyesi logosunu ayri pencerede acmak ister misin? [e/H]: ").strip().lower()
@@ -816,7 +962,8 @@ def main():
     while True:
         print("-" * 60)
         print("Karsilastigin sorunu kisaca yaz (orn: 'bilgisayar cok yavas')")
-        print("Komutlar: 'liste' = sik sorun listesi, 'hizli' = hizli onarim menusu,")
+        print("Komutlar: 'hizlandir' = yavas PC'yi adim adim hizlandir,")
+        print("          'liste' = sik sorun listesi, 'hizli' = tek tek onarim araclari,")
         print("          'cikis' = programi kapat")
         sorun = input("\n> ").strip()
 
@@ -826,6 +973,10 @@ def main():
 
         if sorun.lower() == "hizli":
             hizli_komut_menusu()
+            continue
+
+        if sorun.lower() in ("hizlandir", "hizlandirma"):
+            gorusme_ozeti.append({"sorun": "Hizlandirma sihirbazi", "cevap": hizlandirma_sihirbazi()})
             continue
 
         if sorun.lower() == "liste":

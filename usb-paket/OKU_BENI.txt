@@ -10,15 +10,18 @@ NASIL KULLANILIR?
 3) Demirbas/PC adini yazabilir ya da bos gecebilirsin.
 4) Karsilastigin sorunu kisaca yaz, ornek:
       "bilgisayar cok yavas aciliyor"
-   ya da "sik" yazip hazir sorun listesinden sec.
+   ya da "liste" yazip hazir sorun listesinden sec.
 5) Internet varsa yapay zeka (DeepSeek) destegiyle
    akilli teshis ve onarim onerisi alirsin.
    Internet yoksa yerel teshis listesi calisir.
 6) Sistemi degistiren her onarim adiminda sana ayrica
    onay sorulur - onaylamadan hicbir sey calismaz.
-7) "hizli" yazarak hazir onarim komutlarindan birini
+7) Bilgisayar yavassa "hizlandir" yaz: once neden yavas
+   oldugunu ozetler, sonra her hizlandirma adimini tek tek
+   onayinla uygular (internet gerekmez).
+8) "hizli" yazarak hazir onarim komutlarindan birini
    dogrudan secip onaylayarak calistirabilirsin.
-8) "cikis" ile programi kapat. Oturum ozeti otomatik
+9) "cikis" ile programi kapat. Oturum ozeti otomatik
    olarak bu USB'ye (raporlar/ klasorune) kaydedilir.
 
 GUVENLIK NOTU

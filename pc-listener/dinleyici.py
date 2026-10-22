@@ -111,11 +111,15 @@ def cihaz_dinle(port_adi: str, durdur_event: threading.Event):
         print(f"Port {port_adi} dinlenemedi: {e}")
 
 
+# Pico'nun USB-seri cipi WCH CH343 (VID 0x1A86); ESP32'nin kendi USB'si Espressif (VID 0x303A).
+# Yalnizca bu portlar dinlenir: hepsini acmak, PC'deki baska seri cihazlari (yazar kasa,
+# barkod okuyucu, olcum cihazi...) mesgul edip kullanilamaz hale getirebiliyordu.
+PICO_VIDLERI = {0x1A86, 0x303A}
+
+
 def aktif_portlari_bul():
     portlar = serial.tools.list_ports.comports()
-    # CH343/ESP32 cihazlarini tahmin etmeye calisir ama emin olamadigimiz
-    # icin TUM seri portlari deniyoruz (zararsiz: sinyal gelmezse sessiz kalir)
-    return [p.device for p in portlar]
+    return [p.device for p in portlar if p.vid in PICO_VIDLERI]
 
 
 def main():
